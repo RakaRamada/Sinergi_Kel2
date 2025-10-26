@@ -23,7 +23,7 @@ if (isset($_POST['register'])) {
         $mail->Host       = 'smtp.gmail.com';
         $mail->SMTPAuth   = true;
         $mail->Username   = 'sinergi.tik24@gmail.com';
-        $mail->Password   = 'levj cvaa gdnl nrha'; // app password gmail
+        $mail->Password   = 'jzqz zlot alna qqda'; // app password gmail
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
         $mail->Port       = 465;
 
