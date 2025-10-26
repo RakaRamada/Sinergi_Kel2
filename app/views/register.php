@@ -15,7 +15,7 @@ if (isset($_POST['register'])) {
 
     // 2. Query SQL dengan variabel yang langsung dimasukkan ke dalamnya
     // PERHATIAN: Pastikan variabel string diapit oleh tanda kutip tunggal (')
-    $sql = "INSERT INTO users (nama_lengkap, email, password, role, verifikasi_kode, is_verif) 
+    $sql_users = "INSERT INTO users (nama_lengkap, email, password, role, verifikasi_kode, is_verif) 
             VALUES ('$nama', '$email', '$password', '$role', '$code', $is_verif)";
             // Angka (seperti $is_verif) tidak perlu tanda kutip
 
