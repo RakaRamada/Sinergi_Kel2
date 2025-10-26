@@ -31,7 +31,7 @@ if (isset($_POST['login'])) {
             // PERHATIAN: Kolom di Oracle seringkali menjadi uppercase, jadi kita pakai 'IS_VERIF'
             if ($user_data['IS_VERIF'] == 1) {
                 $_SESSION['user'] = $user_data;
-                echo "<script>alert('Login Berhasil!');window.location='index.php';</script>";
+                echo "<script>alert('Login Berhasil!');window.location='../../index.php';</script>";
                 exit; // Hentikan eksekusi setelah redirect
             } else {
                 $pesan = "Verifikasi akun anda terlebih dahulu!";

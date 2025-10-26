@@ -1,51 +1,38 @@
 <?php
-require_once "../../config/koneksi.php"; 
+require_once "../../config/koneksi.php";
 
 if (isset($_GET['code'])) {
     $code = $_GET['code'];
 
-    // 1. Query untuk mencari user berdasarkan kode verifikasi
-    // Gunakan nama tabel 'users' agar konsisten
-    $sql_select = "SELECT * FROM users WHERE verifikasi_kode = '$code'";
+    $sql_select = "SELECT * FROM users WHERE verifikasi_kode = :code";
+    $stmt_select = oci_parse($conn, $sql_select);
+    oci_bind_by_name($stmt_select, ":code", $code);
+    oci_execute($stmt_select);
+    $user = oci_fetch_assoc($stmt_select);
 
-    // 2. Persiapkan dan eksekusi query SELECT
-    $statement_select = oci_parse($conn, $sql_select);
-    oci_execute($statement_select);
-
-    // 3. Ambil data user
-    // oci_fetch_assoc akan menghasilkan false jika kode tidak ditemukan
-    $user_data = oci_fetch_assoc($statement_select);
-
-    // 4. Cek apakah user dengan kode tersebut ada
-    if ($user_data) {
-        // Jika user ditemukan, lakukan UPDATE
-        // Ambil ID user. Ingat, Oracle sering mengembalikan nama kolom sbg HURUF BESAR
-        $user_id = $user_data['ID']; 
-
-        $sql_update = "UPDATE users SET is_verif = 1 WHERE id = $user_id";
-
-        // Persiapkan dan eksekusi query UPDATE
-        $statement_update = oci_parse($conn, $sql_update);
-        
-        if(oci_execute($statement_update)) {
-            echo "<script>alert('Verifikasi berhasil, silahkan login');window.location='login.php'</script>";
+    if ($user) {
+        if ($user['IS_VERIF'] == 1) {
+            echo "<script>alert('Akun sudah diverifikasi sebelumnya.');window.location='../views/login.php';</script>";
         } else {
-            // Jika update gagal karena alasan teknis
-            echo "<script>alert('Gagal memperbarui status verifikasi!');window.location='register.php'</script>";
-        }
-        // Bebaskan statement update
-        oci_free_statement($statement_update);
+            $sql_update = "UPDATE users SET is_verif = 1 WHERE verifikasi_kode = :code";
+            $stmt_update = oci_parse($conn, $sql_update);
+            oci_bind_by_name($stmt_update, ":code", $code);
 
+            if (oci_execute($stmt_update)) {
+                echo "<script>alert('Verifikasi akun berhasil! Silakan login.');window.location='../views/login.php';</script>";
+            } else {
+                echo "<script>alert('Gagal memperbarui status verifikasi!');window.location='../views/register.php';</script>";
+            }
+            oci_free_statement($stmt_update);
+        }
     } else {
-        // Jika kode verifikasi tidak ditemukan di database
-        echo "<script>alert('Verifikasi tidak valid!');window.location='register.php'</script>";
+        echo "<script>alert('Kode verifikasi tidak valid!');window.location='../views/register.php';</script>";
     }
-    
-    // Bebaskan statement select dan tutup koneksi
-    oci_free_statement($statement_select);
+
+    oci_free_statement($stmt_select);
     oci_close($conn);
 
 } else {
-    echo "Kode verifikasi tidak ditemukan!";
+    echo "<script>alert('Kode verifikasi tidak ditemukan!');window.location='../views/register.php';</script>";
 }
 ?>
