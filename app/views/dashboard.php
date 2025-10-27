@@ -14,10 +14,6 @@ require 'app/views/partials/header.php';
             class="flex-1 text-center py-3 font-semibold hover:bg-gray-100 <?php if ($current_view === 'teman') echo 'border-b-2 border-black text-black'; else echo 'text-gray-500'; ?>">
             Teman
         </a>
-        <a href="index.php?page=dashboard&view=komunitas"
-            class="flex-1 text-center py-3 font-semibold hover:bg-gray-100 <?php if ($current_view === 'komunitas') echo 'border-b-2 border-black text-black'; else echo 'text-gray-500'; ?>">
-            Komunitas
-        </a>
     </div>
 
     <div>

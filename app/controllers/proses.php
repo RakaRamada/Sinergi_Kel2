@@ -23,7 +23,7 @@ if (isset($_POST['register'])) {
     $existing = oci_fetch_assoc($check_stmt);
 
     if ($existing) {
-        echo "<script>alert('Email sudah terdaftar!');window.location='../views/register.php';</script>";
+    echo "<script>alert('Email sudah terdaftar!');window.location='../../index.php?page=register';</script>";
         exit();
     }
 
@@ -80,15 +80,12 @@ if (isset($_POST['register'])) {
         </div>
         ";
             $mail->send();
-            echo "<script>alert('Registrasi berhasil! Cek email kamu untuk verifikasi.');window.location='../views/login.php';</script>";
-
+echo "<script>alert('Registrasi berhasil! Cek email kamu untuk verifikasi.');window.location='../../index.php?page=login';</script>";
         } catch (Exception $e) {
-            echo "<script>alert('Registrasi berhasil tapi email gagal dikirim. Error: {$mail->ErrorInfo}');window.location='../views/login.php';</script>";
-        }
+echo "<script>alert('Registrasi berhasil tapi email gagal dikirim. Error: {$mail->ErrorInfo}');window.location='../../index.php?page=login';</script>";        }
     } else {
         $e = oci_error($stmt);
-        echo "<script>alert('Gagal menyimpan data ke database! Error: " . htmlentities($e['message']) . "');window.location='../views/register.php';</script>";
-    }
+echo "<script>alert('Gagal menyimpan data ke database! Error: " . htmlentities($e['message']) . "');window.location='../../index.php?page=register';</script>";    }
 
     oci_free_statement($stmt);
     oci_close($conn);
