@@ -19,7 +19,7 @@ $page = $_GET['page'] ?? 'home';
 $public_pages = ['login', 'register', 'process-login'];
 
 // Jika user belum login dan mencoba akses halaman non-publik, arahkan ke login
-if (!isset($_SESSION['user']) && !in_array($page, $public_pages)) {
+if (!isset($_SESSION['id_users']) && !in_array($page, $public_pages)) {
     header('Location: index.php?page=login');
     exit;
 }
@@ -36,13 +36,9 @@ switch ($page) {
         login_view();
         break;
 
-    // --- PERBAIKAN: TAMBAHKAN CASE UNTUK 'REGISTER' ---
     case 'register':
-        // Langsung panggil view register, sesuai permintaan Anda
-        // bahwa register.php sudah benar.
         require 'app/views/register.php'; 
         break;
-    // --- AKHIR PERBAIKAN ---
 
     case 'process-login':
         require 'app/controllers/HomeController.php';
@@ -55,13 +51,16 @@ switch ($page) {
         break;
 
     case 'post-detail':
-        require 'app/controllers/PostController.php';
-        show();
+        require_once 'app/controllers/PostingController.php';
+        showPostDetail();
         break;
 
+    // === PERBAIKAN: Gunakan require_once dan nama file yang benar (huruf besar 'P') ===
     case 'profile':
-        require 'app/views/profile.php';
+        require_once 'app/controllers/ProfileController.php';
+        showProfile();
         break;
+    // === AKHIR PERBAIKAN ===
 
     case 'search':
         require 'app/views/search.php';

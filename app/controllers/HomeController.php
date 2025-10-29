@@ -1,45 +1,92 @@
 <?php
+// app/controllers/HomeController.php
+
 // INI WAJIB ADA DI ATAS (GLOBAL SCOPE)
 require_once __DIR__ . '/../../config/koneksi.php';
 
 function login_view() {
-    // INI WAJIB ADA DI DALAM FUNGSI (FUNCTION SCOPE)
+    // === PERBAIKAN: Tambahkan 'global $conn' ===
+    // Ini agar $conn 'terlihat' di dalam fungsi ini
+    // dan juga di dalam file view yang dipanggilnya (login.php).
     global $conn;
 
-    // Baris ini sekarang akan aman karena $conn sudah ada
+    // Tampilkan halaman login
+    // session_start() sudah dipanggil di index.php
     require_once __DIR__ . '/../views/login.php';
 }
 
 function process_login() {
-    // Logika MySQL Anda yang belum terpakai
+    // 1. Ambil koneksi Oracle
+    global $conn; 
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        global $koneksi; // Ini seharusnya $conn jika Anda mau pakai OCI
-
         $email = $_POST['email'] ?? '';
-        $password = $_POST['password'] ?? '';
+        $password_input = $_POST['password'] ?? ''; // Ganti nama var agar tidak bentrok
 
-        // Error: Ini mysqli, bukan oci
-        $query = mysqli_query($koneksi, "SELECT * FROM users WHERE email='$email' LIMIT 1"); 
-        $user = mysqli_fetch_assoc($query);
+        // Validasi input
+        if (empty($email) || empty($password_input)) {
+             $_SESSION['error'] = 'Email dan password tidak boleh kosong';
+             header('Location: index.php?page=login');
+             exit;
+        }
 
-        if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['user'] = $user;
+        // 2. Query menggunakan OCI (Oracle)
+        // (Menggunakan nama kolom dari tabel 'users' Anda)
+        $sql = "SELECT id_users, username, nama_lengkap, password FROM users WHERE email = :email_bv";
+        
+        $stmt = oci_parse($conn, $sql);
+        oci_bind_by_name($stmt, ':email_bv', $email);
+        
+        if (!oci_execute($stmt)) {
+             $e = oci_error($stmt);
+             $_SESSION['error'] = 'Error database: ' . $e['message'];
+             header('Location: index.php?page=login');
+             exit;
+        }
+        
+        $user_data = oci_fetch_assoc($stmt); // Ambil data user
+
+        // 3. Verifikasi password dan set session
+        // $user_data akan 'false' jika email tidak ditemukan
+        // password_verify akan 'true' jika password cocok
+        if ($user_data && password_verify($password_input, $user_data['PASSWORD'])) {
+            
+            // === INI KUNCI PERBAIKANNYA ===
+            // Set session menggunakan 'id_users' agar sinkron
+            $_SESSION['id_users'] = $user_data['ID_USERS'];
+            $_SESSION['username'] = $user_data['USERNAME']; // Opsional, tapi berguna
+            $_SESSION['nama_lengkap'] = $user_data['NAMA_LENGKAP']; // Opsional
+
+            // Hapus session lama jika ada
+            unset($_SESSION['user']);
+            unset($_SESSION['error']);
+            
+            // BERSIHKAN
+            oci_free_statement($stmt);
+            oci_close($conn);
+
             header('Location: index.php?page=dashboard');
             exit;
+            
         } else {
+            // Email tidak ditemukan atau password salah
             $_SESSION['error'] = 'Email atau password salah';
+            
+            if($stmt) oci_free_statement($stmt);
+            if($conn) oci_close($conn);
+            
             header('Location: index.php?page=login');
             exit;
         }
     }
 }
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+// Hapus 'session_start()' ganda dari sini
 
 function dashboard_view() {
-    if (!isset($_SESSION['user'])) {
+    // === PERBAIKAN KEDUA ===
+    // Cek 'id_users', BUKAN 'user', agar sinkron dengan index.php
+    if (!isset($_SESSION['id_users'])) {
         header('Location: index.php?page=login');
         exit();
     }
@@ -47,7 +94,9 @@ function dashboard_view() {
 }
 
 function index() {
+    // Jika user membuka halaman utama, langsung arahkan ke dashboard
     dashboard_view();
 }
 
 ?>
+
