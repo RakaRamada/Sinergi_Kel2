@@ -32,6 +32,10 @@ if ($is_logged_in && ($page === 'login' || $page === 'register')) {
     exit();
 }
 
+if (!in_array($page, $public_pages)) {
+    require_once 'app/views/partials/header.php';
+}
+
 // --------------------------------------------------------------------------
 // ROUTER SEDERHANA
 // --------------------------------------------------------------------------
@@ -116,6 +120,17 @@ switch ($page) {
         checkNewMessages(); // Kita akan buat fungsi ini
         break;
     // === AKHIR TAMBAHAN ===
+
+
+    case 'create-forum':
+        require_once 'app/controllers/ForumController.php';
+        showCreateForm(); 
+        break;
+
+    case 'store-forum':
+        require_once 'app/controllers/ForumController.php';
+        storeForum();
+        break;
         
     default:
         // Jika 'page' tidak dikenali, arahkan ke halaman default yang aman
@@ -127,6 +142,10 @@ switch ($page) {
             showLogin();
         }
         break;
+}
+
+if (!in_array($page, $public_pages)) {
+    require_once 'app/views/partials/footer.php';
 }
 
 ?>

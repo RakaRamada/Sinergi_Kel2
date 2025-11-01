@@ -1,6 +1,4 @@
 <?php 
-// 1. Panggil header (membuka HTML, body, grid, dan sidebar kiri)
-require 'app/views/partials/header.php'; 
 ?>
 
 <main class="col-span-6 border-r border-gray-200">
@@ -31,6 +29,4 @@ require 'app/views/partials/header.php';
 // 3. Panggil sidebar kanan
 require 'app/views/partials/sidebar_kanan.php'; 
 
-// 4. Panggil footer
-require 'app/views/partials/footer.php'; 
 ?>

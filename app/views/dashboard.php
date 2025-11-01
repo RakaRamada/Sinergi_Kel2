@@ -1,6 +1,4 @@
 <?php 
-// 1. Memanggil header (membuka HTML, body, container, grid, dan menampilkan sidebar kiri)
-require 'app/views/partials/header.php';
 ?>
 
 <main class="col-span-6 border-r border-gray-200">
@@ -274,6 +272,4 @@ if (($_GET['view'] ?? 'teman') === 'komunitas') {
     require 'app/views/partials/sidebar_teman.php';
 }
 
-// 4. Memanggil footer (berisi skrip JS dan tag penutup HTML)
-require 'app/views/partials/footer.php'; 
 ?>
