@@ -68,4 +68,81 @@ function storeForum() {
         exit();
     }
 }
+
+/**
+ * Menangani permintaan user untuk bergabung ke sebuah forum.
+ * Dipanggil oleh router 'page=join-forum'.
+ */
+function handleJoinForum() {
+    // 0. Pastikan session aktif untuk mendapatkan ID user
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    // 1. Validasi: Pastikan user login DAN forum_id ada di URL
+    if (isset($_SESSION['user_id']) && isset($_GET['forum_id'])) {
+        
+        $user_id = (int)$_SESSION['user_id'];
+        $forum_id = (int)$_GET['forum_id'];
+
+        // 2. Panggil fungsi Model 'joinForum' (yang sudah kita buat)
+        $success = joinForum($user_id, $forum_id);
+
+        if ($success) {
+            // 3. Berhasil! Arahkan user ke halaman forum yang baru dia ikuti
+            header('Location: index.php?page=messages&forum_id=' . $forum_id);
+            exit();
+        } else {
+            // 4. Gagal (mungkin karena error DB)
+            // Kembali ke halaman search dengan pesan error
+            header('Location: index.php?page=search&tab=forum&error=join_failed');
+            exit();
+        }
+
+    } else {
+        // 5. Jika tidak login atau tidak ada forum_id, tendang ke login
+        header('Location: index.php?page=login');
+        exit();
+    }
+}
+
+/**
+ * Menampilkan halaman detail forum (info, anggota, dll.)
+ */
+function showForumDetails() {
+    // 0. Pastikan session aktif
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    // 1. Validasi: Pastikan user login DAN forum_id ada di URL
+    if (isset($_SESSION['user_id']) && isset($_GET['forum_id'])) {
+        
+        $user_id = (int)$_SESSION['user_id'];
+        $forum_id = (int)$_GET['forum_id'];
+
+        // 2. Panggil Model untuk data dasar forum
+        // (Fungsi getForumById() sudah kita buat sebelumnya)
+        $forum_info = getForumById($forum_id);
+
+        // 3. Panggil Model untuk daftar anggota
+        // (Fungsi getForumMembers() akan kita BUAT DI LANGKAH SELANJUTNYA)
+        $forum_members = getForumMembers($forum_id); 
+
+        // 4. Cek apakah user ini adalah pembuat forum (untuk tombol 'Edit')
+        $is_creator = false;
+        if ($forum_info && isset($forum_info['created_by_user_id'])) {
+            $is_creator = ($forum_info['created_by_user_id'] == $user_id);
+        }
+
+        // 5. Muat file view (yang akan kita BUAT DI LANGKAH SELANJUTNYA)
+        // dan kirimkan semua data yang kita kumpulkan
+        require 'app/views/forum_details.php';
+
+    } else {
+        // Jika tidak login atau tidak ada forum_id, tendang ke login
+        header('Location: index.php?page=login');
+        exit();
+    }
+}
 ?>

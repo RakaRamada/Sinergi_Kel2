@@ -47,14 +47,15 @@ function showMessages() {
 }
 
 /**
- * Fungsi untuk menyimpan pesan baru yang dikirim dari form.
+ * Menyimpan pesan baru yang dikirim dari form (via AJAX).
+ * Tidak lagi me-redirect, tapi mengembalikan JSON.
  */
 function storeMessage() {
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
 
-    // 1. Validasi dasar
+    // 1. Validasi
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id'])) {
         
         $forum_id = (int)$_POST['forum_id'];
@@ -63,18 +64,25 @@ function storeMessage() {
 
         if (!empty($forum_id) && !empty($isi_pesan) && !empty($sender_id)) {
             
-            // 4. Panggil createMessage() dari MessageModel
-            createMessage($forum_id, $sender_id, $isi_pesan);
+            // 2. Panggil Model untuk menyimpan (Model kita sekarang mengembalikan ID)
+            $newMessageId = createMessage($forum_id, $sender_id, $isi_pesan);
             
-            // 5. Redirect kembali ke halaman chat forum
-            // Kita HAPUS view=komunitas karena tab itu sudah tidak ada
-            header("Location: index.php?page=messages&forum_id=" . $forum_id);
-            exit();
+            if ($newMessageId) {
+                // 3. Berhasil disimpan! Ambil data lengkap pesan baru itu.
+                $newMessageData = getMessageById($newMessageId);
+
+                // 4. Kirim data lengkap itu kembali ke JavaScript sebagai JSON
+                header('Content-Type: application/json');
+                echo json_encode($newMessageData);
+                exit();
+            }
         }
     }
     
-    // Jika gagal, kembalikan ke halaman utama pesan
-    header("Location: index.php?page=messages");
+    // Jika gagal, kirim error JSON
+    header('Content-Type: application/json');
+    http_response_code(400); // Bad Request
+    echo json_encode(['error' => 'Gagal menyimpan pesan']);
     exit();
 }
 

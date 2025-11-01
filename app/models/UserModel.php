@@ -219,4 +219,45 @@ function getUserProfileData($username) {
 
     return $profile ? array_change_key_case($profile, CASE_LOWER) : null;
 }
+
+/**
+ * Mencari pengguna berdasarkan username atau nama lengkap.
+ *
+ * @param string $searchTerm Kata kunci pencarian.
+ * @return array Array berisi pengguna yang cocok.
+ */
+function searchUsers($searchTerm) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) {
+        error_log("Koneksi DB gagal di searchUsers.");
+        return [];
+    }
+
+    // Mencari di DUA kolom: username ATAU nama_lengkap
+    $sql = "SELECT user_id, username, nama_lengkap, role_id 
+            FROM users 
+            WHERE UPPER(username) LIKE :term OR UPPER(nama_lengkap) LIKE :term";
+            
+    $searchTermWildcard = '%' . strtoupper($searchTerm) . '%';
+
+    $stmt = oci_parse($conn, $sql);
+    
+    oci_bind_by_name($stmt, ':term', $searchTermWildcard);
+
+    if (!oci_execute($stmt)) {
+         $e = oci_error($stmt);
+         error_log("OCI8 Error in searchUsers: " . $e['message']);
+         @oci_close($conn);
+         return [];
+    }
+
+    $users = [];
+    while ($row = oci_fetch_assoc($stmt)) {
+        $users[] = array_change_key_case($row, CASE_LOWER);
+    }
+
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    return $users;
+}
 ?>

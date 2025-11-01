@@ -3,7 +3,12 @@
 
 /**
  * Menyimpan pesan baru ke database.
- * (Fungsi ini sudah benar)
+ * --- VERSI DIPERBARUI (Tanpa EMPTY_CLOB) ---
+ *
+ * @param int $forum_id ID forum tujuan.
+ * @param int $sender_id ID pengguna yang mengirim.
+ * @param string $isi_pesan Teks pesan.
+ * @return int|false ID pesan baru jika berhasil, false jika gagal.
  */
 function createMessage($forum_id, $sender_id, $isi_pesan) {
     require __DIR__ . '/../../config/koneksi.php';
@@ -12,55 +17,47 @@ function createMessage($forum_id, $sender_id, $isi_pesan) {
         return false; 
     }
 
+    $new_message_id = 0; // Siapkan variabel untuk menampung ID
+
+    // --- PERBAIKAN SQL ---
+    // Kita tidak pakai EMPTY_CLOB(). Kita insert string langsung.
+    // Ini adalah satu query sederhana yang auto-commit.
     $sql = "INSERT INTO messages (forum_id, sender_id, isi_pesan, created_at)
-            VALUES (:fid, :sid, EMPTY_CLOB(), SYSDATE)
-            RETURNING isi_pesan INTO :isi_pesan_clob"; 
+            VALUES (:fid, :sid, :isi_pesan, SYSDATE)
+            RETURNING message_id INTO :new_id";
 
     $stmt = oci_parse($conn, $sql);
 
     $clean_forum_id = (int)$forum_id;
     $clean_sender_id = (int)$sender_id;
-    $clob = oci_new_descriptor($conn, OCI_D_LOB);
 
     oci_bind_by_name($stmt, ':fid', $clean_forum_id, -1, SQLT_INT);
     oci_bind_by_name($stmt, ':sid', $clean_sender_id, -1, SQLT_INT);
-    oci_bind_by_name($stmt, ':isi_pesan_clob', $clob, -1, OCI_B_CLOB);
+    // Bind isi_pesan sebagai string. Oracle akan otomatis konversi ke CLOB.
+    oci_bind_by_name($stmt, ':isi_pesan', $isi_pesan, -1, SQLT_CHR);
+    oci_bind_by_name($stmt, ':new_id', $new_message_id, -1, SQLT_INT);
 
-    if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) {
+    // Eksekusi (dengan auto-commit standar, BUKAN OCI_NO_AUTO_COMMIT)
+    if (!oci_execute($stmt)) {
          $e = oci_error($stmt);
          error_log("OCI8 Error in createMessage execute: " . $e['message']);
-         oci_rollback($conn);
          @oci_close($conn);
          return false;
     }
 
-    if (!$clob->save($isi_pesan)) {
-        oci_rollback($conn); 
-        $e = oci_error($clob); 
-        error_log("OCI8 Error saving CLOB: " . ($e ? $e['message'] : 'Unknown error'));
-        @oci_close($conn);
-        return false;
-    }
-
-    if (!oci_commit($conn)) {
-        $e = oci_error($conn); 
-        error_log("OCI8 Error committing transaction: " . ($e ? $e['message'] : 'Unknown error'));
-        oci_rollback($conn); 
-        @oci_close($conn);
-        return false;
-    }
-
+    // Tidak perlu save CLOB atau commit manual
+    
     oci_free_statement($stmt);
-    oci_free_descriptor($clob);
     @oci_close($conn);
 
-    return true; 
+    // Kembalikan ID baru
+    return $new_message_id;
 }
 
 
 /**
  * Mengambil semua pesan lama (saat halaman dimuat)
- * (Fungsi ini yang menyebabkan timestamp hilang di pesan lama)
+ * (Fungsi ini sudah ada)
  */
 function getMessagesByForumId($forum_id) {
     require __DIR__ . '/../../config/koneksi.php';
@@ -69,19 +66,7 @@ function getMessagesByForumId($forum_id) {
         return []; 
     }
 
-    // --- PERBAIKAN SQL (Tambahkan TO_CHAR) ---
-    $sql = "SELECT 
-                m.message_id, 
-                m.forum_id, 
-                m.sender_id, 
-                m.isi_pesan, 
-                TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, -- Ambil jam:menit
-                u.nama_lengkap AS sender_nama 
-            FROM messages m 
-            JOIN users u ON m.sender_id = u.user_id 
-            WHERE m.forum_id = :fid 
-            ORDER BY m.created_at ASC";
-    // ------------------------------------
+    $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, u.nama_lengkap AS sender_nama FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.forum_id = :fid ORDER BY m.created_at ASC";
 
     $stmt = oci_parse($conn, $sql);
 
@@ -97,7 +82,6 @@ function getMessagesByForumId($forum_id) {
 
     $messages = [];
     while ($row = oci_fetch_assoc($stmt)) {
-        // Proses CLOB
         $isi_pesan_string = '';
         if (isset($row['ISI_PESAN']) && $row['ISI_PESAN'] instanceof OCILob) {
             $isi_pesan_string = $row['ISI_PESAN']->read($row['ISI_PESAN']->size());
@@ -116,8 +100,48 @@ function getMessagesByForumId($forum_id) {
 
 
 /**
+ * --- FUNGSI BARU YANG HILANG (UNTUK AJAX SUBMIT) ---
+ * Mengambil SATU pesan berdasarkan ID-nya.
+ *
+ * @param int $message_id ID pesan yang baru dibuat.
+ * @return array|null Array data pesan, atau null.
+ */
+function getMessageById($message_id) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) {
+        error_log('Koneksi DB gagal di getMessageById.');
+        return null;
+    }
+
+    $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, u.nama_lengkap AS sender_nama FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.message_id = :mid";
+
+    $stmt = oci_parse($conn, $sql);
+    
+    $clean_id = (int)$message_id;
+    oci_bind_by_name($stmt, ':mid', $clean_id, -1, SQLT_INT);
+
+    if (!oci_execute($stmt)) {
+        error_log('Error getMessageById: ' . oci_error($stmt)['message']);
+        @oci_close($conn);
+        return null;
+    }
+
+    $row = oci_fetch_assoc($stmt);
+    
+    // Proses CLOB
+    if ($row && isset($row['ISI_PESAN']) && $row['ISI_PESAN'] instanceof OCILob) {
+        $row['ISI_PESAN'] = $row['ISI_PESAN']->read($row['ISI_PESAN']->size());
+    }
+
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    return $row ? array_change_key_case($row, CASE_LOWER) : null;
+}
+
+
+/**
  * Mengambil pesan baru (untuk Long Polling)
- * (Fungsi ini yang menyebabkan timestamp hilang di pesan baru)
+ * (Fungsi ini sudah ada)
  */
 function getNewMessagesAfterId($forum_id, $last_message_id) {
     require __DIR__ . '/../../config/koneksi.php';
@@ -126,19 +150,7 @@ function getNewMessagesAfterId($forum_id, $last_message_id) {
         return [];
     }
 
-    // --- PERBAIKAN SQL (Tambahkan TO_CHAR) ---
-    $sql = "SELECT 
-                m.message_id, 
-                m.forum_id, 
-                m.sender_id, 
-                m.isi_pesan, 
-                TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, -- Ambil jam:menit
-                u.nama_lengkap AS sender_nama 
-            FROM messages m 
-            JOIN users u ON m.sender_id = u.user_id 
-            WHERE m.forum_id = :fid AND m.message_id > :last_id 
-            ORDER BY m.created_at ASC";
-    // ------------------------------------
+    $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, u.nama_lengkap AS sender_nama FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.forum_id = :fid AND m.message_id > :last_id ORDER BY m.created_at ASC";
 
     $stmt = oci_parse($conn, $sql);
 
@@ -155,7 +167,6 @@ function getNewMessagesAfterId($forum_id, $last_message_id) {
 
     $messages = [];
     while ($row = oci_fetch_assoc($stmt)) {
-        // Proses CLOB
         $isi_pesan_string = '';
         if (isset($row['ISI_PESAN']) && $row['ISI_PESAN'] instanceof OCILob) {
             $isi_pesan_string = $row['ISI_PESAN']->read($row['ISI_PESAN']->size());
@@ -171,5 +182,4 @@ function getNewMessagesAfterId($forum_id, $last_message_id) {
     @oci_close($conn);
     return $messages;
 }
-
 ?>

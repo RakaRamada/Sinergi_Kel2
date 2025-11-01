@@ -44,6 +44,7 @@ function getAllForums() {
  * @param int $forum_id ID forum yang ingin diambil.
  * @return array|null Array berisi info forum, atau null jika tidak ditemukan/error.
  */
+// Di dalam app/models/ForumModel.php
 function getForumById($forum_id) {
     require __DIR__ . '/../../config/koneksi.php';
     if (!$conn) {
@@ -51,29 +52,28 @@ function getForumById($forum_id) {
         return null; 
     }
 
-    // Query 1 baris (menghindari ORA-01745)
-    $sql = "SELECT forum_id, nama_forum, deskripsi FROM forums WHERE forum_id = :fid";
+    // --- PERUBAHAN: Tambahkan f.forum_image ---
+    $sql = "SELECT forum_id, nama_forum, deskripsi, forum_image 
+            FROM forums 
+            WHERE forum_id = :fid";
     
     $stmt = oci_parse($conn, $sql); 
     
-    // Bind dengan tipe data eksplisit (menghindari ORA-01745)
     $clean_forum_id = (int)$forum_id;
     oci_bind_by_name($stmt, ':fid', $clean_forum_id, -1, SQLT_INT);
 
     if (!oci_execute($stmt)) {
-         $e = oci_error($stmt);
-         error_log("OCI8 Error in getForumById: " . $e['message']);
-         @oci_close($conn);
+         // ... (error handling) ...
          return null;
     }
     
     $forum = oci_fetch_assoc($stmt);
+    // ... (sisanya sama) ...
     oci_free_statement($stmt);
     @oci_close($conn);
 
     return $forum ? array_change_key_case($forum, CASE_LOWER) : null;
-} // <--- PASTIKAN ADA '}' DI SINI
-
+}
 
 /**
  * Mengambil semua forum yang telah diikuti oleh user_id tertentu.
@@ -82,6 +82,7 @@ function getForumById($forum_id) {
  * @param int $user_id ID pengguna.
  * @return array Array berisi daftar forum, atau array kosong jika tidak ada/error.
  */
+// Di dalam app/models/ForumModel.php
 function getForumsByUserId($user_id) {
     require __DIR__ . '/../../config/koneksi.php';
     if (!$conn) {
@@ -89,30 +90,32 @@ function getForumsByUserId($user_id) {
         return [];
     }
 
-    // Bypass ORA-01745: Suntikkan user_id yang aman (dari session)
     $safe_user_id = (int)$user_id; 
-    $sql = "SELECT f.forum_id, f.nama_forum, f.deskripsi FROM forums f JOIN forum_members fm ON f.forum_id = fm.forum_id WHERE fm.user_id = " . $safe_user_id . " ORDER BY f.nama_forum ASC";
+
+    // --- PERUBAHAN: Tambahkan f.forum_image ---
+    $sql = "SELECT f.forum_id, f.nama_forum, f.deskripsi, f.forum_image 
+            FROM forums f 
+            JOIN forum_members fm ON f.forum_id = fm.forum_id 
+            WHERE fm.user_id = " . $safe_user_id . " 
+            ORDER BY f.nama_forum ASC";
     
     $stmt = oci_parse($conn, $sql);
-    // Tidak perlu bind
-
+    
     if (!oci_execute($stmt)) {
-         $e = oci_error($stmt);
-         error_log("OCI8 Error in getForumsByUserId: " . $e['message']);
-         @oci_close($conn);
+         // ... (error handling) ...
          return [];
     }
 
     $forums = [];
     while ($row = oci_fetch_assoc($stmt)) {
+        // ... (Proses CLOB jika perlu) ...
         $forums[] = array_change_key_case($row, CASE_LOWER);
     }
 
     oci_free_statement($stmt);
     @oci_close($conn);
     return $forums;
-} // <--- PASTIKAN ADA '}' DI SINI
-
+}
 /**
  * Menyimpan forum baru ke database.
  *
@@ -235,6 +238,112 @@ function joinForum($user_id, $forum_id) {
     oci_free_statement($stmt);
     @oci_close($conn);
     return true;
+}
+
+/**
+ * Mencari forum berdasarkan nama.
+ *
+ * @param string $searchTerm Kata kunci pencarian.
+ * @return array Array berisi forum yang cocok.
+ */
+function searchForums($searchTerm) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) {
+        error_log("Koneksi DB gagal di searchForums.");
+        return [];
+    }
+
+    // Kita akan mencari forum yang namanya mengandung (LIKE) searchTerm.
+    // Kita gunakan UPPER() di kedua sisi agar pencarian tidak case-sensitive (tidak peduli huruf besar/kecil).
+    $sql = "SELECT forum_id, nama_forum, deskripsi, forum_image
+            FROM forums 
+            WHERE UPPER(nama_forum) LIKE :term";
+            
+    // Siapkan bind variable dengan wildcard (%)
+    $searchTermWildcard = '%' . strtoupper($searchTerm) . '%';
+
+    $stmt = oci_parse($conn, $sql);
+    
+    // Bind searchTerm
+    oci_bind_by_name($stmt, ':term', $searchTermWildcard);
+
+    if (!oci_execute($stmt)) {
+         $e = oci_error($stmt);
+         error_log("OCI8 Error in searchForums: " . $e['message']);
+         @oci_close($conn);
+         return [];
+    }
+
+    $forums = [];
+    while ($row = oci_fetch_assoc($stmt)) {
+        // Kita perlu memproses CLOB (deskripsi) jika ada
+        if (isset($row['DESKRIPSI']) && $row['DESKRIPSI'] instanceof OCILob) {
+            $row['DESKRIPSI'] = $row['DESKRIPSI']->read($row['DESKRIPSI']->size());
+        }
+        $forums[] = array_change_key_case($row, CASE_LOWER);
+    }
+
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    return $forums;
+}
+
+/**
+ * Mengambil daftar anggota (members) dari sebuah forum.
+ *
+ * @param int $forum_id ID forum.
+ * @return array Array berisi daftar anggota (user).
+ */
+function getForumMembers($forum_id) {
+    // 1. Koneksi stabil
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) {
+        error_log("Koneksi DB gagal di getForumMembers.");
+        return [];
+    }
+
+    // Pastikan ID aman (dari bug ORA-01745)
+    $safe_forum_id = (int)$forum_id;
+
+    // 2. Query SQL (JOIN 3 tabel: forum_members -> users -> roles)
+    // Kita ambil info user dan role mereka di forum
+    $sql = "SELECT 
+                u.user_id, 
+                u.username, 
+                u.nama_lengkap, 
+                r.role_name 
+            FROM 
+                forum_members fm
+            JOIN 
+                users u ON fm.user_id = u.user_id
+            JOIN 
+                roles r ON u.role_id = r.role_id
+            WHERE 
+                fm.forum_id = " . $safe_forum_id . "
+            ORDER BY 
+                u.nama_lengkap ASC"; // Urutkan A-Z
+
+    $stmt = oci_parse($conn, $sql);
+
+    // 3. Eksekusi
+    if (!oci_execute($stmt)) {
+         $e = oci_error($stmt);
+         error_log("OCI8 Error in getForumMembers: " . $e['message']);
+         @oci_close($conn);
+         return [];
+    }
+
+    // 4. Ambil semua hasilnya
+    $members = [];
+    while ($row = oci_fetch_assoc($stmt)) {
+        $members[] = array_change_key_case($row, CASE_LOWER);
+    }
+
+    // 5. Bebaskan resource & tutup koneksi
+    oci_free_statement($stmt);
+    @oci_close($conn);
+
+    return $members;
 }
 
 ?>
