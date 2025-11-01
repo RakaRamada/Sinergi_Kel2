@@ -1,77 +1,131 @@
 <?php
-// TAMBAHKAN DUA BARIS INI DI PALING ATAS
+// Menampilkan semua error untuk debugging
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-session_start();
-require 'app/helpers/utils.php';
+// Memulai sesi PHP di setiap halaman
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-// ... sisa kode router Anda ...
-?>
+// --------------------------------------------------------------------------
+// AUTHENTICATION GUARD (PENJAGA AUTENTIKASI)
+// --------------------------------------------------------------------------
 
-<?php
-// Memulai sesi PHP di setiap halaman. Ini penting untuk mengelola status login pengguna.
+// 1. Cek apakah user sudah login
+$is_logged_in = isset($_SESSION['user_id']);
+
+// 2. Tentukan halaman yang diminta.
+$page = $_GET['page'] ?? ($is_logged_in ? 'dashboard' : 'login');
+
+// 3. Daftar halaman "publik" (boleh diakses tanpa login)
+$public_pages = ['login', 'login-process', 'register', 'register-process', 'verify'];
+
+// 4. Logika Penjaga
+if (!$is_logged_in && !in_array($page, $public_pages)) {
+    header("Location: index.php?page=login");
+    exit();
+}
+
+if ($is_logged_in && ($page === 'login' || $page === 'register')) {
+    header("Location: index.php?page=dashboard");
+    exit();
+}
 
 // --------------------------------------------------------------------------
 // ROUTER SEDERHANA
 // --------------------------------------------------------------------------
 
-// 1. Ambil parameter 'page' dari URL. 
-// Contoh: http://localhost/Sinergi/?page=login
-// Jika tidak ada parameter 'page', kita anggap pengguna ingin ke halaman 'home'.
-$page = $_GET['page'] ?? 'home';
-
-// 2. Gunakan switch statement untuk memanggil controller yang sesuai.
-// Ini seperti resepsionis yang mengarahkan tamu ke ruangan yang benar.
+// 5. Panggil controller yang sesuai
 switch ($page) {
     case 'login':
-        // Jika URL-nya ?page=login, panggil AuthController untuk menampilkan form login.
-        require 'app/controllers/AuthController.php';
-        login_view(); // Panggil fungsi untuk menampilkan view login
+        require_once 'app/controllers/AuthController.php';
+        showLogin(); 
         break;
 
-    case 'process-login':
-        // Jika pengguna men-submit form login, panggil fungsi untuk memprosesnya.
-        require 'app/controllers/AuthController.php';
-        process_login(); // Panggil fungsi untuk memproses data login
+    case 'login-process':
+        require_once 'app/controllers/AuthController.php';
+        doLogin(); 
         break;
+        
+    case 'register':
+        require_once 'app/controllers/AuthController.php';
+        showRegister(); 
+        break;
+
+    case 'register-process':
+        require_once 'app/controllers/AuthController.php';
+        doRegister();
+        break;
+
+    case 'verify':
+        require_once 'app/controllers/VerifController.php';
+        verify_email();
+        break;
+
+    case 'logout':
+        require_once 'app/controllers/AuthController.php';
+        logout();
+        break;
+        
+    // --- HALAMAN PRIVAT (SETELAH LOGIN) ---
 
     case 'dashboard':
-        // Jika URL-nya ?page=dashboard, panggil HomeController.
-        require 'app/controllers/HomeController.php';
-        dashboard_view(); // Panggil fungsi untuk menampilkan view dashboard
+        require_once 'app/controllers/HomeController.php';
+        dashboard_view(); 
         break;
 
-    // ... di dalam switch ($page) ...
     case 'post-detail':
-    require 'app/controllers/PostController.php'; // Kita akan buat file ini nanti
-    show(); // Panggil fungsi untuk menampilkan detail postingan
-    break;
+        require_once 'app/controllers/PostController.php'; 
+        show();
+        break;
 
-    // Anda bisa menambahkan case lain di sini, misalnya 'profile', 'logout', dll.
     case 'profile':
-    // Kita akan buat PostController nanti, untuk sekarang cukup view
-    require 'app/views/profile.php';
-    break;
+        require_once 'app/controllers/UserController.php';
+        show_profile();
+        break;
 
     case 'search':
-    require 'app/views/search.php';
-    break;
+        require_once 'app/views/search.php'; // Sebaiknya lewat controller
+        break;
 
     case 'notification':
-        require 'app/views/notification.php';
+        require_once 'app/views/notification.php'; // Sebaiknya lewat controller
         break;
 
-    // CASE BARU UNTUK HALAMAN PESAN
     case 'messages':
-        require 'app/views/messages.php';
+        require_once 'app/controllers/MessageController.php';
+        showMessages();
         break;
 
+    // === TAMBAHAN BARU DI SINI ===
+    case 'settings':
+        // Langsung panggil view karena belum ada logika kompleks
+        require_once 'app/views/settings.php';
+        break;
+    // === AKHIR TAMBAHAN ===
+
+    case 'store-message':
+        require_once 'app/controllers/MessageController.php';
+        storeMessage();
+        break;
+
+    // === TAMBAHAN BARU UNTUK LONG POLLING ===
+    case 'check-new-messages':
+        require_once 'app/controllers/MessageController.php';
+        checkNewMessages(); // Kita akan buat fungsi ini
+        break;
+    // === AKHIR TAMBAHAN ===
+        
     default:
-        // Jika parameter 'page' tidak ada atau tidak dikenali (misalnya halaman utama),
-        // kita arahkan ke HomeController.
-        require 'app/controllers/HomeController.php';
-        index(); // Panggil fungsi default (misalnya, cek login lalu arahkan ke dashboard)
+        // Jika 'page' tidak dikenali, arahkan ke halaman default yang aman
+        if ($is_logged_in) {
+            require_once 'app/controllers/HomeController.php';
+            dashboard_view(); 
+        } else {
+            require_once 'app/controllers/AuthController.php';
+            showLogin();
+        }
         break;
 }
 

@@ -1,6 +1,6 @@
 <?php 
 // 1. Memanggil header (membuka HTML, body, container, grid, dan menampilkan sidebar kiri)
-require 'app/views/partials/header.php'; 
+require 'app/views/partials/header.php';
 ?>
 
 <main class="col-span-6 border-r border-gray-200">
