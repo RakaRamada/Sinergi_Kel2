@@ -105,13 +105,27 @@ $current_forum_id = isset($_GET['forum_id']) ? (int)$_GET['forum_id'] : null;
         <?php if (isset($messages) && is_array($messages) && !empty($messages)): ?>
         <?php foreach ($messages as $message): ?>
         <?php 
-                $msg_id = $message['message_id'] ?? 0; 
-                $sender_id = $message['sender_id'] ?? null;
-                $isi_pesan_string = $message['isi_pesan'] ?? '';
-                $created_at_time = $message['created_at_time'] ?? ''; 
-                $sender_nama = $message['sender_nama'] ?? 'User';
-                $current_user_id = $_SESSION['user_id'] ?? null;
-                $is_my_message = ($sender_id == $current_user_id); 
+                // Ambil tipe pesan (BARU)
+                $msg_type = $message['message_type'] ?? 'text';
+
+                // Logika untuk pesan sistem
+                if ($msg_type !== 'text'): 
+            ?>
+        <div class="text-center text-sm text-gray-500 my-2">
+            <?= htmlspecialchars($message['isi_pesan']) ?>
+            <span class="text-xs ml-1"><?= htmlspecialchars($message['created_at_time']) ?></span>
+        </div>
+
+        <?php 
+                // Logika untuk pesan chat biasa
+                else: 
+                    $msg_id = $message['message_id'] ?? 0; 
+                    $sender_id = $message['sender_id'] ?? null;
+                    $isi_pesan_string = $message['isi_pesan'] ?? '';
+                    $created_at_time = $message['created_at_time'] ?? ''; 
+                    $sender_nama = $message['sender_nama'] ?? 'User';
+                    $current_user_id = $_SESSION['user_id'] ?? null;
+                    $is_my_message = ($sender_id == $current_user_id); 
             ?>
         <?php if ($is_my_message): ?>
         <div class="flex justify-end" id="message-<?= $msg_id ?>">
@@ -133,6 +147,7 @@ $current_forum_id = isset($_GET['forum_id']) ? (int)$_GET['forum_id'] : null;
             </div>
         </div>
         <?php endif; ?>
+        <?php endif; // Akhir dari if ($msg_type) ?>
         <?php endforeach; ?>
         <?php else: ?>
         <div id="no-message-placeholder" class="text-center text-gray-500">Belum ada pesan di forum ini.</div>
@@ -185,10 +200,9 @@ function scrollToBottom() {
 function appendMessage(message) {
     if (!chatBox) return;
 
-    // Perbaikan Bug Gema: Cek apakah pesan sudah ada
     const existingMessage = document.getElementById(`message-${message.message_id}`);
     if (existingMessage) {
-        return; // JANGAN TAMBAHKAN, pesan sudah ada
+        return; // Mencegah gema
     }
 
     const placeholder = document.getElementById('no-message-placeholder');
@@ -214,26 +228,43 @@ function appendMessage(message) {
 
     const timeString = message.created_at_time || '';
 
-    if (isMyMessage) {
+    // --- PERUBAHAN JS DI SINI ---
+    const msg_type = message.message_type || 'text';
+    const msg_id = message.message_id || 0;
+
+    if (msg_type !== 'text') {
+        // TAMPILAN PESAN SISTEM (JOIN/LEAVE)
         messageHTML = `
-        <div class="flex justify-end" id="message-${message.message_id}">
-            <div class="bg-blue-500 text-white p-3 rounded-lg max-w-[70%]">
-                ${escapeHTML(message.isi_pesan)}
-                <div class="text-xs text-blue-100 mt-1 text-right">${timeString}</div>
-            </div>
+        <div class="text-center text-sm text-gray-500 my-2" id="message-${msg_id}">
+            ${escapeHTML(message.isi_pesan)}
+            <span class="text-xs ml-1">${timeString}</span>
         </div>
         `;
     } else {
-        messageHTML = `
-        <div class="flex justify-start" id="message-${message.message_id}">
-            <div class="bg-gray-200 p-3 rounded-lg max-w-[70%]">
-                <p class="text-xs font-semibold mb-1 text-blue-600">${escapeHTML(message.sender_nama)}</p>
-                ${escapeHTML(message.isi_pesan)}
-                <div class="text-xs text-gray-500 mt-1 text-right">${timeString}</div>
+        // TAMPILAN PESAN CHAT BIASA (Bubble)
+        if (isMyMessage) {
+            messageHTML = `
+            <div class="flex justify-end" id="message-${msg_id}">
+                <div class="bg-blue-500 text-white p-3 rounded-lg max-w-[70%]">
+                    ${escapeHTML(message.isi_pesan)}
+                    <div class="text-xs text-blue-100 mt-1 text-right">${timeString}</div>
+                </div>
             </div>
-        </div>
-        `;
+            `;
+        } else {
+            messageHTML = `
+            <div class="flex justify-start" id="message-${msg_id}">
+                <div class="bg-gray-200 p-3 rounded-lg max-w-[70%]">
+                    <p class="text-xs font-semibold mb-1 text-blue-600">${escapeHTML(message.sender_nama)}</p>
+                    ${escapeHTML(message.isi_pesan)}
+                    <div class="text-xs text-gray-500 mt-1 text-right">${timeString}</div>
+                </div>
+            </div>
+            `;
+        }
     }
+    // --- AKHIR PERUBAHAN JS ---
+
     chatBox.innerHTML += messageHTML;
 }
 

@@ -83,6 +83,10 @@ switch ($page) {
         require_once 'app/controllers/ForumController.php';
         handleJoinForum();
         break;
+    case 'exit-forum':
+        require_once 'app/controllers/ForumController.php';
+        handleExitForum(); // Kita akan buat fungsi ini di Langkah 3
+        break;
 
     // --- Kasus Halaman Konten (Dashboard, Pesan, dll.) ---
     case 'dashboard':

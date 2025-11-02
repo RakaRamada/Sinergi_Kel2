@@ -1,5 +1,5 @@
 <?php
-// File: app/models/UserModel.php
+// File: app/models/UserModel.php (VERSI ROMBAKAN STABIL)
 
 /**
  * Ambil data user berdasarkan email
@@ -64,10 +64,43 @@ function getUserByUsername($username)
 }
 
 /**
+ * Ambil data user berdasarkan ID
+ * (Dibutuhkan oleh ForumModel untuk pesan sistem join/leave)
+ */
+function getUserById($user_id)
+{
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) {
+        error_log('Koneksi DB gagal di getUserById.');
+        return null;
+    }
+
+    $sql = "SELECT u.user_id, u.nama_lengkap, u.username, r.role_name 
+            FROM users u
+            JOIN roles r ON u.role_id = r.role_id
+            WHERE u.user_id = :uid";
+            
+    $stmt = oci_parse($conn, $sql);
+    
+    $clean_id = (int)$user_id;
+    oci_bind_by_name($stmt, ':uid', $clean_id, -1, SQLT_INT); 
+
+    if (!oci_execute($stmt)) {
+        error_log('Error getUserById: ' . oci_error($stmt)['message']);
+        @oci_close($conn);
+        return null;
+    }
+
+    $row = oci_fetch_assoc($stmt);
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    return $row ? array_change_key_case($row, CASE_LOWER) : null;
+}
+
+/**
  * Tambahkan user baru ke database
  * (untuk proses registrasi)
  */
-// Parameter $expires sudah kita hapus dari AuthController, jadi ini sudah sinkron
 function createUser($username, $nama_lengkap, $email, $password_hash, $role_id, $token) 
 {
     require __DIR__ . '/../../config/koneksi.php';
@@ -76,20 +109,20 @@ function createUser($username, $nama_lengkap, $email, $password_hash, $role_id, 
         return 'db_error';
     }
 
-    $sql_check = "SELECT COUNT(*) AS CNT FROM users WHERE email = :email";
+    $sql_check = "SELECT COUNT(*) AS CNT FROM users WHERE email = :email OR username = :uname";
     $stmt_check = oci_parse($conn, $sql_check);
     oci_bind_by_name($stmt_check, ':email', $email);
+    oci_bind_by_name($stmt_check, ':uname', $username);
     oci_execute($stmt_check);
-    $email_exists = oci_fetch_assoc($stmt_check)['CNT'] > 0;
+    $row = oci_fetch_assoc($stmt_check);
+    $email_exists = ($row && $row['CNT'] > 0);
     oci_free_statement($stmt_check);
 
     if ($email_exists) {
         @oci_close($conn);
-        return 'email_exists';
+        return 'email_exists'; // (atau 'username_exists')
     }
 
-    // --- PERBAIKAN ---
-    // Hapus kolom 'verification_token_expires_at' dari query INSERT
     $sql = "INSERT INTO users (
         username, nama_lengkap, email, password_hash, role_id,
         verification_token, is_verified
@@ -137,8 +170,7 @@ function verifyUserByToken($token)
         error_log('Koneksi DB gagal di verifyUserByToken.');
         return 'db_error';
     }
-
-    // Query 1 baris (menghindari ORA-01745 di SELECT)
+ 
     $sql_find = "SELECT user_id FROM users WHERE verification_token = :token";
     
     $stmt_find = oci_parse($conn, $sql_find);
@@ -154,21 +186,14 @@ function verifyUserByToken($token)
     oci_free_statement($stmt_find);
     if (!$row) {
         @oci_close($conn);
-        return 'invalid_or_expired'; // Token tidak ditemukan
+        return 'invalid_or_expired';
     }
-
-    // Pastikan user_id adalah integer (Aman)
+ 
     $user_id = (int)$row['USER_ID']; 
-    
-    // --- PERBAIKAN ORA-01745 (UPDATE) ---
-    // Kita akan SUNTIKKAN $user_id yang 100% aman (dari database, bukan input user)
-    // untuk menghindari bug oci_bind_by_name
     
     $sql_update = "UPDATE users SET is_verified = 1, verification_token = NULL WHERE user_id = " . $user_id;
     
     $stmt_update = oci_parse($conn, $sql_update);
-    // Kita tidak perlu oci_bind_by_name lagi
-    // ------------------------------------
 
     if (!oci_execute($stmt_update, OCI_NO_AUTO_COMMIT)) {
         error_log('Error verifyUserByToken update: ' . oci_error($stmt_update)['message']);
@@ -192,7 +217,6 @@ function verifyUserByToken($token)
 
 /**
  * Mengambil data profil lengkap
- * (Dibutuhkan oleh UserController.php)
  */
 function getUserProfileData($username) {
     require __DIR__ . '/../../config/koneksi.php'; 
@@ -216,15 +240,11 @@ function getUserProfileData($username) {
     $profile = oci_fetch_assoc($stmt);
     oci_free_statement($stmt);
     @oci_close($conn);
-
     return $profile ? array_change_key_case($profile, CASE_LOWER) : null;
 }
 
 /**
  * Mencari pengguna berdasarkan username atau nama lengkap.
- *
- * @param string $searchTerm Kata kunci pencarian.
- * @return array Array berisi pengguna yang cocok.
  */
 function searchUsers($searchTerm) {
     require __DIR__ . '/../../config/koneksi.php';
@@ -233,7 +253,6 @@ function searchUsers($searchTerm) {
         return [];
     }
 
-    // Mencari di DUA kolom: username ATAU nama_lengkap
     $sql = "SELECT user_id, username, nama_lengkap, role_id 
             FROM users 
             WHERE UPPER(username) LIKE :term OR UPPER(nama_lengkap) LIKE :term";

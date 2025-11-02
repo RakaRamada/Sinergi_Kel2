@@ -58,11 +58,17 @@ function doLogin() {
             // 4. Cek status verifikasi
             if ((int)($user_data['is_verified'] ?? 0) === 1) { // Kolom 'is_verified'
                 // Login Berhasil
-                $_SESSION['user_id'] = $user_data['user_id'];
-                $_SESSION['nama'] = $user_data['nama_lengkap'];
-                $_SESSION['role_name'] = $user_data['role_name']; 
-                
-                header("Location: index.php?page=dashboard");
+                // 5. Sukses! Simpan info user ke session
+            $_SESSION['user_id'] = $user_data['user_id'];
+            $_SESSION['nama_lengkap'] = $user_data['nama_lengkap']; // (Ganti nama 'nama')
+            $_SESSION['role_name'] = $user_data['role_name']; 
+            
+            // --- TAMBAHAN YANG HILANG ---
+            $_SESSION['username'] = $user_data['username']; // WAJIB ADA
+            // ---------------------------
+            
+            // 6. Arahkan ke halaman utama aplikasi
+            header("Location: index.php?page=dashboard");
                 exit; 
             } else {
                 $_SESSION['error_message'] = "Verifikasi akun anda terlebih dahulu! Cek email Anda.";

@@ -1,6 +1,11 @@
 <?php
 // File: app/models/ForumModel.php
 
+// --- PERUBAHAN 1: Pindahkan require_once ke atas ---
+require_once __DIR__ . '/UserModel.php';
+require_once __DIR__ . '/MessageModel.php';
+
+
 /**
  * Mengambil semua forum dari database.
  * (Digunakan oleh MessageController jika tidak ada user_id / belum login)
@@ -53,7 +58,7 @@ function getForumById($forum_id) {
     }
 
     // --- PERUBAHAN: Tambahkan f.forum_image ---
-    $sql = "SELECT forum_id, nama_forum, deskripsi, forum_image 
+    $sql = "SELECT forum_id, nama_forum, deskripsi, forum_image, created_by_user_id 
             FROM forums 
             WHERE forum_id = :fid";
     
@@ -64,6 +69,9 @@ function getForumById($forum_id) {
 
     if (!oci_execute($stmt)) {
          // ... (error handling) ...
+         $e = oci_error($stmt);
+         error_log("OCI8 Error in getForumById: " . $e['message']);
+         @oci_close($conn);
          return null;
     }
     
@@ -103,6 +111,9 @@ function getForumsByUserId($user_id) {
     
     if (!oci_execute($stmt)) {
          // ... (error handling) ...
+         $e = oci_error($stmt);
+         error_log("OCI8 Error in getForumsByUserId: " . $e['message']);
+         @oci_close($conn);
          return [];
     }
 
@@ -191,12 +202,17 @@ function createForum($nama_forum, $deskripsi, $creator_user_id, $image_name) {
 
 /**
  * Mendaftarkan user ke dalam forum (bergabung).
+ * VERSI AMAN: Otomatis membersihkan nama & memberi default 'Seseorang'
  *
  * @param int $user_id ID pengguna.
  * @param int $forum_id ID forum.
+ * @param string $user_nama Nama pengguna (dari session, BISA KOTOR/NULL).
  * @return bool True jika berhasil, false jika gagal.
  */
-function joinForum($user_id, $forum_id) {
+function joinForum($user_id, $forum_id, $user_nama = 'Seseorang') {
+
+    // (require_once sudah dipindah ke atas file)
+
     require __DIR__ . '/../../config/koneksi.php';
     if (!$conn) { return false; }
 
@@ -215,12 +231,11 @@ function joinForum($user_id, $forum_id) {
     oci_bind_by_name($stmt, ':uid', $clean_user_id, -1, SQLT_INT);
     oci_bind_by_name($stmt, ':fid', $clean_forum_id, -1, SQLT_INT);
 
-    // --- PERBAIKAN DI SINI ---
     // 1. Eksekusi TANPA auto-commit
     if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) { 
          $e = oci_error($stmt);
          error_log("OCI8 Error in joinForum: " . $e['message']);
-         oci_rollback($conn); // Batalkan jika eksekusi gagal
+         oci_rollback($conn); 
          @oci_close($conn);
          return false;
     }
@@ -229,15 +244,102 @@ function joinForum($user_id, $forum_id) {
     if (!oci_commit($conn)) {
         $e = oci_error($conn);
         error_log("OCI8 Error committing in joinForum: " . $e['message']);
-        oci_rollback($conn); // Batalkan jika commit gagal
+        oci_rollback($conn); 
         @oci_close($conn);
         return false;
     }
-    // --- AKHIR PERBAIKAN ---
+
+    // === PERBAIKAN LOGIKA FINAL (DI DALAM MODEL) ===
+    
+    // 1. Ambil nama (dari parameter atau default 'Seseorang')
+    $nama_asli = $user_nama ?? 'Seseorang';
+
+    // 2. Buat versi bersih HANYA untuk tes (hapus SEMUA spasi & karakter aneh/control)
+    $nama_untuk_tes = preg_replace('/[[:cntrl:]\s]/u', '', $nama_asli);
+
+    // 3. Cek: Apakah versi bersihnya itu KOSONG?
+    $nama_final_untuk_pesan = '';
+    if (empty($nama_untuk_tes)) {
+        // Jika ya, nama itu pasti "kosong" atau spasi "ajaib". Gunakan default.
+        $nama_final_untuk_pesan = 'Seseorang';
+    } else {
+        // Jika tidak, nama itu valid. Gunakan nama ASLI (tapi trim spasi biasa).
+        $nama_final_untuk_pesan = trim($nama_asli);
+    }
+    // =============================================
+   
+    // 4. Buat pesan sistem dengan nama yang sudah DIJAMIN BERSIH
+    createSystemMessage($clean_forum_id, $clean_user_id, 'join', $nama_final_untuk_pesan . ' telah bergabung dengan forum.');
 
     oci_free_statement($stmt);
     @oci_close($conn);
     return true;
+}
+
+/**
+ * Menghapus keanggotaan user dari sebuah forum (Keluar Forum).
+ * VERSI AMAN: Otomatis membersihkan nama & memberi default 'Seseorang'
+ *
+ * @param int $user_id ID pengguna.
+ * @param int $forum_id ID forum.
+ * @param string $user_nama Nama pengguna (dari session, BISA KOTOR/NULL).
+ * @return bool True jika berhasil, false jika gagal.
+ */
+function leaveForum($user_id, $forum_id, $user_nama = 'Seseorang') {
+
+    // (require_once sudah dipindah ke atas file)
+
+    // 1. Koneksi stabil
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) {
+        error_log("Koneksi DB gagal di leaveForum.");
+        return false;
+    }
+
+    $safe_user_id = (int)$user_id;
+    $safe_forum_id = (int)$forum_id;
+
+    // === PERBAIKAN LOGIKA FINAL (DI DALAM MODEL) ===
+    
+    // 1. Ambil nama (dari parameter atau default 'Seseorang')
+    $nama_asli = $user_nama ?? 'Seseorang';
+
+    // 2. Buat versi bersih HANYA untuk tes (hapus SEMUA spasi & karakter aneh/control)
+    $nama_untuk_tes = preg_replace('/[[:cntrl:]\s]/u', '', $nama_asli);
+
+    // 3. Cek: Apakah versi bersihnya itu KOSONG?
+    $nama_final_untuk_pesan = '';
+    if (empty($nama_untuk_tes)) {
+        // Jika ya, nama itu pasti "kosong" atau spasi "ajaib". Gunakan default.
+        $nama_final_untuk_pesan = 'Seseorang';
+    } else {
+        // Jika tidak, nama itu valid. Gunakan nama ASLI (tapi trim spasi biasa).
+        $nama_final_untuk_pesan = trim($nama_asli);
+    }
+    // ========================================================
+
+    // 4. Buat pesan sistem DULUAN (dengan nama bersih)
+    createSystemMessage($safe_forum_id, $safe_user_id, 'leave', $nama_final_untuk_pesan . ' telah keluar dari forum.');
+
+    // 5. Query SQL DELETE
+    $sql = "DELETE FROM forum_members 
+            WHERE user_id = " . $safe_user_id . " 
+            AND forum_id = " . $safe_forum_id;
+    
+    $stmt = oci_parse($conn, $sql);
+
+    // 6. Eksekusi (dengan auto-commit)
+    if (!oci_execute($stmt)) {
+         $e = oci_error($stmt);
+         error_log("OCI8 Error in leaveForum: " . $e['message']);
+         @oci_close($conn);
+         return false;
+    }
+
+    oci_free_statement($stmt);
+    @oci_close($conn);
+
+    return true; // Sukses
 }
 
 /**
@@ -345,5 +447,7 @@ function getForumMembers($forum_id) {
 
     return $members;
 }
+
+
 
 ?>

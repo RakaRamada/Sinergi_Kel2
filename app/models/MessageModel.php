@@ -66,7 +66,8 @@ function getMessagesByForumId($forum_id) {
         return []; 
     }
 
-    $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, u.nama_lengkap AS sender_nama FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.forum_id = :fid ORDER BY m.created_at ASC";
+    // Query 
+    $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, m.message_type, u.nama_lengkap AS sender_nama FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.forum_id = :fid ORDER BY m.created_at ASC";
 
     $stmt = oci_parse($conn, $sql);
 
@@ -150,7 +151,8 @@ function getNewMessagesAfterId($forum_id, $last_message_id) {
         return [];
     }
 
-    $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, u.nama_lengkap AS sender_nama FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.forum_id = :fid AND m.message_id > :last_id ORDER BY m.created_at ASC";
+    // Query 
+    $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, m.message_type, u.nama_lengkap AS sender_nama FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.forum_id = :fid AND m.message_id > :last_id ORDER BY m.created_at ASC";
 
     $stmt = oci_parse($conn, $sql);
 
@@ -181,5 +183,49 @@ function getNewMessagesAfterId($forum_id, $last_message_id) {
     oci_free_statement($stmt);
     @oci_close($conn);
     return $messages;
+}
+
+/**
+ * Membuat pesan sistem (join/leave) di dalam chat.
+ *
+ * @param int $forum_id ID forum.
+ * @param int $user_id ID user yang join/leave.
+ * @param string $type Tipe pesan ('join' or 'leave').
+ * @param string $message_text Teks yang akan ditampilkan (misal: "telah bergabung")
+ * @return bool
+ */
+function createSystemMessage($forum_id, $user_id, $type, $message_text) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if(!$conn) {
+        error_log("Koneksi DB Gagal di CreateSystemMessage.");
+        return false;
+    }
+
+    // query insert (menggunakan kolom message_type) kita biarkan auto commit
+
+    $sql = "INSERT INTO messages (forum_id, sender_id, isi_pesan, created_at, message_type) VALUES (:fid, :sid, :isi_pesan, SYSDATE, :msg_type)";
+
+    $stmt = oci_parse($conn, $sql);
+
+    // Bind Parameter
+    $clean_forum_id = (int)$forum_id;
+    $clean_sender_id = (int)$user_id;
+
+    oci_bind_by_name($stmt, ':fid', $clean_forum_id, -1, SQLT_INT);
+    oci_bind_by_name($stmt, ':sid', $clean_sender_id, -1, SQLT_INT);
+    oci_bind_by_name($stmt, ':isi_pesan', $message_text, -1, SQLT_CHR); //bind sebagai string biasa
+    oci_bind_by_name($stmt, ':msg_type', $type);
+
+    // eksekusi
+    if (!oci_execute($stmt)) {
+        $e = oci_error($stmt);
+        error_log("OCI8 Error in createSystemMessage : " . $e['message']);
+        @oci_close($conn);
+        return false;
+    }
+    // bebaskan resource
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    return true;
 }
 ?>

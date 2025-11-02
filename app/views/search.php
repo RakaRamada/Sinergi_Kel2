@@ -57,7 +57,7 @@
         <div class="p-4 border-b border-gray-200 hover:bg-gray-50">
             <div class="flex items-center justify-between">
                 <div class="flex items-center">
-                    <img src="<?= $image_path ?>" alt="Avatar Forum" class="w-12 h-12 rounded-lg mr-4 object-cover">
+                    <img src="<?= $image_path ?>" alt="Avatar Forum" class="w-12 h-12 rounded-full mr-4 object-cover">
                     <div>
                         <p class="font-bold text-gray-800"><?= htmlspecialchars($forum['nama_forum']) ?></p>
                         <p class="text-sm text-gray-600 mt-1 truncate"><?= $deskripsi ?></p>

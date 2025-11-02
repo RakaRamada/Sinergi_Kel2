@@ -54,7 +54,18 @@ function storeForum() {
 
         if ($new_forum_id) {
             // Otomatis join ke forum yang baru dibuat
-            joinForum($creator_user_id, $new_forum_id);
+            
+            // --- KITA HARUS AMBIL NAMA DI SINI JUGA ---
+            $nama_asli = $_SESSION['nama_lengkap'] ?? '';
+            $nama_untuk_tes = preg_replace('/[[:cntrl:]\s]/u', '', $nama_asli);
+            if (empty($nama_untuk_tes)) {
+                $user_nama = 'Seseorang';
+            } else {
+                $user_nama = trim($nama_asli);
+            }
+            // ----------------------------------------
+            
+            joinForum($creator_user_id, $new_forum_id, $user_nama); // <--- SEKARANG DENGAN 3 PARAMETER
             
             // Berhasil! Arahkan ke halaman pesan
             header('Location: index.php?page=messages&success=forum_created');
@@ -85,22 +96,41 @@ function handleJoinForum() {
         $user_id = (int)$_SESSION['user_id'];
         $forum_id = (int)$_GET['forum_id'];
 
-        // 2. Panggil fungsi Model 'joinForum' (yang sudah kita buat)
-        $success = joinForum($user_id, $forum_id);
+        // --- PERBAIKAN LOGIKA FINAL ---
+        // 1. Ambil nama asli dari session
+        $nama_asli = $_SESSION['nama_lengkap'] ?? '';
+        
+        // 2. Buat versi bersih HANYA untuk tes (hapus SEMUA spasi & karakter aneh/control)
+        //    [[:cntrl:]] -> semua control character (termasuk null byte \0)
+        //    \s          -> semua whitespace (termasuk spasi "ajaib" \u)
+        $nama_untuk_tes = preg_replace('/[[:cntrl:]\s]/u', '', $nama_asli);
+
+        // 3. Cek: Apakah versi bersihnya itu KOSONG?
+        if (empty($nama_untuk_tes)) {
+            // Jika ya, nama itu pasti "kosong" atau spasi "ajaib". Gunakan default.
+            $user_nama = 'Seseorang';
+        } else {
+            // Jika tidak, nama itu valid. Gunakan nama ASLI (tapi trim spasi biasa).
+            $user_nama = trim($nama_asli);
+        }
+        // ---------------------------------
+
+        // 4. Panggil fungsi Model 'joinForum' (yang sudah kita buat)
+        $success = joinForum($user_id, $forum_id, $user_nama);
 
         if ($success) {
-            // 3. Berhasil! Arahkan user ke halaman forum yang baru dia ikuti
+            // 5. Berhasil! Arahkan user ke halaman forum yang baru dia ikuti
             header('Location: index.php?page=messages&forum_id=' . $forum_id);
             exit();
         } else {
-            // 4. Gagal (mungkin karena error DB)
+            // 6. Gagal (mungkin karena error DB)
             // Kembali ke halaman search dengan pesan error
             header('Location: index.php?page=search&tab=forum&error=join_failed');
             exit();
         }
 
     } else {
-        // 5. Jika tidak login atau tidak ada forum_id, tendang ke login
+        // 7. Jika tidak login atau tidak ada forum_id, tendang ke login
         header('Location: index.php?page=login');
         exit();
     }
@@ -141,6 +171,61 @@ function showForumDetails() {
 
     } else {
         // Jika tidak login atau tidak ada forum_id, tendang ke login
+        header('Location: index.php?page=login');
+        exit();
+    }
+}
+
+/**
+ * Menangani permintaan user untuk keluar dari sebuah forum.
+ * Dipanggil oleh router 'page=exit-forum'.
+ */
+function handleExitForum() {
+    // 0. Pastikan session aktif
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    // 1. Validasi: Pastikan user login DAN forum_id ada di URL
+    if (isset($_SESSION['user_id']) && isset($_GET['forum_id'])) {
+        
+        $user_id = (int)$_SESSION['user_id'];
+        $forum_id = (int)$_GET['forum_id'];
+
+        // --- PERBAIKAN LOGIKA FINAL ---
+        // 1. Ambil nama asli dari session
+        $nama_asli = $_SESSION['nama_lengkap'] ?? '';
+        
+        // 2. Buat versi bersih HANYA untuk tes (hapus SEMUA spasi & karakter aneh/control)
+        //    [[:cntrl:]] -> semua control character (termasuk null byte \0)
+        //    \s          -> semua whitespace (termasuk spasi "ajaib" \u)
+        $nama_untuk_tes = preg_replace('/[[:cntrl:]\s]/u', '', $nama_asli);
+
+        // 3. Cek: Apakah versi bersihnya itu KOSONG?
+        if (empty($nama_untuk_tes)) {
+            // Jika ya, nama itu pasti "kosong" atau spasi "ajaib". Gunakan default.
+            $user_nama = 'Seseorang';
+        } else {
+            // Jika tidak, nama itu valid. Gunakan nama ASLI (tapi trim spasi biasa).
+            $user_nama = trim($nama_asli);
+        }
+        // ---------------------------------
+
+        // 4. Panggil fungsi Model 'leaveForum' (tambahkan parameter $user_nama)
+        $success = leaveForum($user_id, $forum_id, $user_nama);
+
+        // 5. Arahkan kembali ke halaman pesan utama (bukan ke detail forum)
+        if ($success) {
+            header('Location: index.php?page=messages&success=forum_left');
+            exit();
+        } else {
+            // Jika gagal, kembalikan ke halaman detail
+            header('Location: index.php?page=forum-details&forum_id=' . $forum_id . '&error=exit_failed');
+            exit();
+        }
+
+    } else {
+        // 6. Jika tidak login atau tidak ada forum_id, tendang ke login
         header('Location: index.php?page=login');
         exit();
     }
