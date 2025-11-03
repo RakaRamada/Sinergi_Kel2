@@ -85,7 +85,15 @@ switch ($page) {
         break;
     case 'exit-forum':
         require_once 'app/controllers/ForumController.php';
-        handleExitForum(); // Kita akan buat fungsi ini di Langkah 3
+        handleExitForum(); 
+        break;
+    case 'edit-forum': 
+        require_once 'app/controllers/ForumController.php';
+        showEditForm(); 
+        break;
+    case 'update-forum':
+        require_once 'app/controllers/ForumController.php';
+        handleUpdateForum(); 
         break;
 
     // --- Kasus Halaman Konten (Dashboard, Pesan, dll.) ---

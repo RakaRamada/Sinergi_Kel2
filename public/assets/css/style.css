@@ -398,6 +398,9 @@
   .h-12 {
     height: calc(var(--spacing) * 12);
   }
+  .h-16 {
+    height: calc(var(--spacing) * 16);
+  }
   .h-32 {
     height: calc(var(--spacing) * 32);
   }
@@ -430,6 +433,9 @@
   }
   .w-12 {
     width: calc(var(--spacing) * 12);
+  }
+  .w-16 {
+    width: calc(var(--spacing) * 16);
   }
   .w-32 {
     width: calc(var(--spacing) * 32);

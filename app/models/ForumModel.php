@@ -267,7 +267,7 @@ function joinForum($user_id, $forum_id, $user_nama = 'Seseorang') {
         $nama_final_untuk_pesan = trim($nama_asli);
     }
     // =============================================
-   
+    
     // 4. Buat pesan sistem dengan nama yang sudah DIJAMIN BERSIH
     createSystemMessage($clean_forum_id, $clean_user_id, 'join', $nama_final_untuk_pesan . ' telah bergabung dengan forum.');
 
@@ -448,6 +448,87 @@ function getForumMembers($forum_id) {
     return $members;
 }
 
+/**
+ * Memperbarui data forum (Nama, Deskripsi, Gambar) di database.
+ *
+ * @param int $forum_id ID forum yang akan di-update.
+ * @param string $nama_forum Nama baru.
+ * @param string $deskripsi Deskripsi baru (CLOB).
+ * @param string|null $image_name Nama file gambar baru (atau null jika tidak berubah).
+ * @return bool True jika berhasil, false jika gagal.
+ */
+function updateForum($forum_id, $nama_forum, $deskripsi, $image_name) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) {
+        error_log("Koneksi DB gagal di updateForum.");
+        return false; 
+    }
+
+    // 1. Tentukan query SQL
+    // Kita perlu 2 query: satu jika gambar diubah, satu jika tidak.
+    if ($image_name !== null) {
+        // Jika ada gambar baru, update semua 3 kolom
+        $sql = "UPDATE forums 
+                SET nama_forum = :nama, 
+                    deskripsi = EMPTY_CLOB(), 
+                    forum_image = :img_name 
+                WHERE forum_id = :fid
+                RETURNING deskripsi INTO :desk_clob";
+    } else {
+        // Jika tidak ada gambar baru, HANYA update nama dan deskripsi
+        $sql = "UPDATE forums 
+                SET nama_forum = :nama, 
+                    deskripsi = EMPTY_CLOB() 
+                WHERE forum_id = :fid
+                RETURNING deskripsi INTO :desk_clob";
+    }
+
+    $stmt = oci_parse($conn, $sql);
+    
+    $clob = oci_new_descriptor($conn, OCI_D_LOB);
+    $clean_forum_id = (int)$forum_id;
+
+    // 2. Bind parameter
+    oci_bind_by_name($stmt, ':nama', $nama_forum);
+    oci_bind_by_name($stmt, ':fid', $clean_forum_id, -1, SQLT_INT);
+    oci_bind_by_name($stmt, ':desk_clob', $clob, -1, OCI_B_CLOB);
+    
+    // Bind gambar HANYA jika query-nya memerlukannya
+    if ($image_name !== null) {
+        oci_bind_by_name($stmt, ':img_name', $image_name);
+    }
+
+    // 3. Eksekusi
+    if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) {
+         $e = oci_error($stmt);
+         error_log("OCI8 Error in updateForum execute: " . $e['message']);
+         oci_rollback($conn);
+         @oci_close($conn);
+         return false;
+    }
+
+    // 4. Simpan deskripsi ke CLOB
+    if (!$clob->save($deskripsi)) {
+        oci_rollback($conn);
+        error_log("OCI8 Error saving CLOB in updateForum.");
+        @oci_close($conn);
+        return false;
+    }
+    
+    // 5. Commit
+    if (!oci_commit($conn)) {
+        oci_rollback($conn);
+        error_log("OCI8 Error committing in updateForum.");
+        @oci_close($conn);
+        return false;
+    }
+
+    oci_free_statement($stmt);
+    oci_free_descriptor($clob);
+    @oci_close($conn);
+
+    return true; // Sukses
+}
 
 
 ?>

@@ -230,4 +230,122 @@ function handleExitForum() {
         exit();
     }
 }
+
+/**
+ * Menampilkan form untuk mengedit forum.
+ */
+function showEditForm() {
+    // 0. Pastikan session aktif
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    // 1. Validasi: Pastikan user login DAN forum_id ada di URL
+    if (isset($_SESSION['user_id']) && isset($_GET['forum_id'])) {
+        
+        $user_id = (int)$_SESSION['user_id'];
+        $forum_id = (int)$_GET['forum_id'];
+
+        // 2. Panggil Model untuk data dasar forum
+        $forum_info = getForumById($forum_id);
+
+        // 3. Keamanan: Pastikan user ini adalah pembuat forum
+        if ($forum_info && isset($forum_info['created_by_user_id']) && $forum_info['created_by_user_id'] == $user_id) {
+            
+            // 4. Muat file view (yang sudah kita buat)
+            // Kirimkan data $forum_info ke view agar form bisa terisi
+            require 'app/views/edit_forum.php';
+
+        } else {
+            // Jika bukan pembuat, tendang dia!
+            header('Location: index.php?page=forum-details&forum_id=' . $forum_id . '&error=not_creator');
+            exit();
+        }
+
+    } else {
+        // Jika tidak login atau tidak ada forum_id, tendang ke login
+        header('Location: index.php?page=login');
+        exit();
+    }
+}
+
+/**
+ * Memproses data dari form 'Edit Forum' dan menyimpannya.
+ * Dipanggil oleh router 'page=update-forum'.
+ */
+function handleUpdateForum() {
+    // === PANGGIL SESSION_START() DI AWAL ===
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    // === AKHIR PERBAIKAN ===
+
+    // 1. Validasi: Pastikan user login & ini adalah request POST
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id'])) {
+        
+        // 2. Ambil data dari form
+        $user_id = (int)$_SESSION['user_id'];
+        $forum_id = (int)$_POST['forum_id'];
+        $nama_forum = trim($_POST['nama_forum']);
+        $deskripsi = trim($_POST['deskripsi']);
+        $forum_image_file = $_FILES['forum_image']; 
+
+        // 3. Validasi Keamanan: Cek apakah user ini adalah pembuat forum
+        //    (Kita panggil getForumById() untuk cek creator DAN untuk ambil nama file gambar lama)
+        $forum_info = getForumById($forum_id); 
+        if (!$forum_info || $forum_info['created_by_user_id'] != $user_id) {
+            // Jika bukan pembuat, atau forum tidak ada, tendang ke login
+            header('Location: index.php?page=login');
+            exit();
+        }
+        
+        // 4. Validasi data
+        if (empty($nama_forum) || empty($deskripsi) || empty($forum_id)) {
+            header('Location: index.php?page=edit-forum&forum_id=' . $forum_id . '&error=empty');
+            exit();
+        }
+
+        $image_name_to_db = null; 
+
+        // 5. Proses Upload Gambar (Jika ada gambar BARU)
+        if (isset($forum_image_file) && $forum_image_file['error'] === UPLOAD_ERR_OK) {
+            
+            $upload_dir = 'public/uploads/forum_profiles/'; 
+            
+            $image_extension = strtolower(pathinfo($forum_image_file['name'], PATHINFO_EXTENSION));
+            $image_name_to_db = 'forum_' . uniqid() . '.' . $image_extension;
+            $upload_path = $upload_dir . $image_name_to_db;
+
+            if (move_uploaded_file($forum_image_file['tmp_name'], $upload_path)) {
+                // Hapus gambar lama JIKA ADA
+                if (!empty($forum_info['forum_image'])) {
+                    @unlink($upload_dir . $forum_info['forum_image']);
+                }
+            } else {
+                header('Location: index.php?page=edit-forum&forum_id=' . $forum_id . '&error=upload_failed');
+                exit();
+            }
+        }
+        
+        // 6. Panggil Model untuk UPDATE
+        //    (Model function 'updateForum' sudah kamu sediakan dan terlihat benar)
+        $success = updateForum($forum_id, $nama_forum, $deskripsi, $image_name_to_db);
+
+        if ($success) {
+            // 7. Berhasil! Arahkan kembali ke halaman info forum
+            header('Location: index.php?page=forum-details&forum_id=' . $forum_id . '&success=updated');
+            exit();
+        } else {
+            // Gagal menyimpan ke DB
+            header('Location: index.php?page=edit-forum&forum_id=' . $forum_id . '&error=db_error');
+            exit();
+        }
+
+    } else {
+        // Jika bukan POST atau tidak login (karena session_start() hilang), tendang ke login
+        header('Location: index.php?page=login');
+        exit();
+    }
+}
+
 ?>
