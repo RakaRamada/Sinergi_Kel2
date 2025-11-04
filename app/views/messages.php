@@ -3,6 +3,65 @@
 // Konten ini dipanggil oleh index.php
 
 $current_forum_id = isset($_GET['forum_id']) ? (int)$_GET['forum_id'] : null;
+
+// --- TAMBAHKAN FUNGSI HELPER INI ---
+if (!function_exists('formatTanggalChat')) {
+    /**
+     * Mengubah tanggal ISO menjadi format chat (Hari ini, Kemarin, dll.)
+     * @param string $tanggal_iso String tanggal dari DB (format: YYYY-MM-DDTHH:MI:SS)
+     * @return string|null Teks yang akan ditampilkan sebagai divider
+     */
+    function formatTanggalChat($tanggal_iso) {
+        if (!$tanggal_iso) return null;
+        
+        try {
+            // PENTING: Atur zona waktu server kamu. 
+            // Jika server dan user di Indonesia, 'Asia/Jakarta' adalah pilihan aman.
+            $tz = new DateTimeZone('Asia/Jakarta');
+            
+            // 1. Buat patokan waktu "Hari Ini" (jam 00:00)
+            $today = new DateTime('now', $tz);
+            $today->setTime(0, 0, 0); // Reset ke awal hari
+
+            // 2. Buat waktu pesan dari data ISO (misal: '2025-11-04T18:44:00')
+            $messageDate = new DateTime($tanggal_iso, $tz);
+            $messageDate->setTime(0, 0, 0); // Reset ke awal hari juga
+
+            // 3. Hitung selisih hari
+            $diff = $today->diff($messageDate);
+            $diffDays = (int)$diff->format('%r%a'); // %r%a memberi tanda (misal -1 untuk kemarin)
+
+            // 4. Tentukan logikanya
+            if ($diffDays === 0) {
+                return 'Hari ini';
+            } elseif ($diffDays === -1) {
+                return 'Kemarin';
+            } elseif ($diffDays > -7) {
+                // Jika masih dalam 7 hari terakhir, tampilkan nama harinya
+                // Kita buat manual agar tidak bergantung 'locale' server
+                $hari = [
+                    'Sunday'    => 'Minggu',
+                    'Monday'    => 'Senin',
+                    'Tuesday'   => 'Selasa',
+                    'Wednesday' => 'Rabu',
+                    'Thursday'  => 'Kamis',
+                    'Friday'    => 'Jumat',
+                    'Saturday'  => 'Sabtu'
+                ];
+                $namaHariInggris = $messageDate->format('l'); // 'l' = nama hari lengkap (misal: 'Tuesday')
+                return $hari[$namaHariInggris] ?? $namaHariInggris; // 'Selasa'
+            } else {
+                // Jika sudah lama, tampilkan tanggal lengkap
+                return $messageDate->format('d/m/Y'); // Format: 04/11/2025
+            }
+        } catch (Exception $e) {
+            // Jika format tanggalnya aneh, jangan tampilkan apa-apa
+            error_log('Error formatTanggalChat: ' . $e->getMessage());
+            return null;
+        }
+    }
+}
+// --- AKHIR FUNGSI HELPER ---
 ?>
 
 <main class="col-span-4 border-r border-gray-200 flex flex-col h-screen">
@@ -94,18 +153,51 @@ $current_forum_id = isset($_GET['forum_id']) ? (int)$_GET['forum_id'] : null;
     </a>
 
     <?php
+    // Ambil ID pesan terakhir (kode ini sudah ada)
     $last_message_id = 0;
     if (isset($messages) && !empty($messages)) {
         $last_message_id = end($messages)['message_id'] ?? 0;
     }
     ?>
+
     <div id="chat-box" class="flex-grow p-6 overflow-y-auto space-y-4 bg-gray-50"
         data-last-message-id="<?= $last_message_id ?>">
 
         <?php if (isset($messages) && is_array($messages) && !empty($messages)): ?>
-        <?php foreach ($messages as $message): ?>
+
         <?php 
-                // Ambil tipe pesan (BARU)
+        // 1. TAMBAHKAN VARIABEL PELACAK INI (sebelum loop)
+        $tanggal_divider_terakhir = ''; 
+        ?>
+
+        <?php foreach ($messages as $message): ?>
+
+        <?php
+            // 2. LOGIKA TANGGAL BARU (di dalam loop)
+            // Ambil data ISO yang sudah kita SELECT dari Model
+            $tanggal_pesan_raw = $message['created_at_iso'] ?? null;
+            // Panggil fungsi helper kita
+            $tanggal_pesan_format = formatTanggalChat($tanggal_pesan_raw);
+
+            // 3. Cek apakah tanggal ini berbeda dari yang terakhir kita cetak
+            if ($tanggal_pesan_format && $tanggal_pesan_format !== $tanggal_divider_terakhir):
+            ?>
+        <div class="text-center my-3 chat-date-divider"
+            data-date-string="<?= htmlspecialchars($tanggal_pesan_format) ?>">
+            <span class="bg-gray-200 text-gray-700 text-xs font-semibold px-3 py-1 rounded-full">
+                <?= htmlspecialchars($tanggal_pesan_format) ?>
+            </span>
+        </div>
+        <?php
+                // 4. UPDATE PELACAK agar tanggal ini tidak dicetak lagi
+                $tanggal_divider_terakhir = $tanggal_pesan_format; 
+            endif;
+            // --- AKHIR LOGIKA TANGGAL BARU ---
+            ?>
+
+        <?php 
+                // Di bawah ini adalah kode lama kamu (tidak perlu diubah)
+                // Ambil tipe pesan
                 $msg_type = $message['message_type'] ?? 'text';
 
                 // Logika untuk pesan sistem
@@ -127,6 +219,7 @@ $current_forum_id = isset($_GET['forum_id']) ? (int)$_GET['forum_id'] : null;
                     $current_user_id = $_SESSION['user_id'] ?? null;
                     $is_my_message = ($sender_id == $current_user_id); 
             ?>
+
         <?php if ($is_my_message): ?>
         <div class="flex justify-end" id="message-<?= $msg_id ?>">
             <div class="bg-blue-500 text-white p-3 rounded-lg max-w-[70%]">
@@ -149,6 +242,7 @@ $current_forum_id = isset($_GET['forum_id']) ? (int)$_GET['forum_id'] : null;
         <?php endif; ?>
         <?php endif; // Akhir dari if ($msg_type) ?>
         <?php endforeach; ?>
+
         <?php else: ?>
         <div id="no-message-placeholder" class="text-center text-gray-500">Belum ada pesan di forum ini.</div>
         <?php endif; ?>
@@ -189,13 +283,61 @@ const chatBox = document.getElementById('chat-box');
 const chatForm = document.getElementById('chat-form');
 const messageInput = document.getElementById('message-input');
 
-// Fungsi untuk scroll ke bawah
+// --- 1. TAMBAHKAN HELPER FUNCTION JS ---
+/**
+ * Mengubah tanggal ISO menjadi format chat (Hari ini, Kemarin, dll.)
+ * Ini adalah versi JavaScript dari fungsi PHP yang kita buat.
+ */
+function formatTanggalChatJS(tanggalISO) {
+    if (!tanggalISO) return null;
+
+    try {
+        const today = new Date();
+        const msgDate = new Date(tanggalISO); // '2025-11-04T18:44:00'
+
+        // Reset waktu ke 00:00:00 untuk perbandingan HARI
+        // Kita bandingkan berdasarkan WAKTU LOKAL pengguna
+        today.setHours(0, 0, 0, 0);
+        msgDate.setHours(0, 0, 0, 0);
+
+        const diffTime = today.getTime() - msgDate.getTime();
+        // Hitung selisih hari
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) return 'Hari ini';
+        if (diffDays === 1) return 'Kemarin'; // 1 hari yang lalu
+        if (diffDays < 7) {
+            // Tampilkan nama hari (0 = Minggu, 1 = Senin, ...)
+            const hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+            return hari[msgDate.getDay()];
+        }
+
+        // Jika lebih dari seminggu, format: d/m/Y
+        const d = String(msgDate.getDate()).padStart(2, '0');
+        const m = String(msgDate.getMonth() + 1).padStart(2, '0'); // Bulan 0-indexed
+        const y = msgDate.getFullYear();
+        return `${d}/${m}/${y}`;
+
+    } catch (e) {
+        console.error("Gagal format tanggal JS:", e, tanggalISO);
+        return null;
+    }
+}
+// --- AKHIR HELPER FUNCTION JS ---
+
+
+// --- 2. TAMBAHKAN VARIABEL PELACAK GLOBAL ---
+let lastPrintedDate = ''; // Kita akan isi ini saat inisialisasi
+
+
+// Fungsi untuk scroll ke bawah (tidak berubah)
 function scrollToBottom() {
     if (chatBox) {
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 }
 
+// --- 3. MODIFIKASI FUNGSI appendMessage ---
 // Fungsi untuk menambahkan pesan baru ke DOM
 function appendMessage(message) {
     if (!chatBox) return;
@@ -227,6 +369,27 @@ function appendMessage(message) {
     }
 
     const timeString = message.created_at_time || '';
+
+    // --- LOGIKA DIVIDER TANGGAL JS ---
+    const tanggalISO = message.created_at_iso; // Ambil data ISO dari JSON
+    let dateDividerHTML = '';
+
+    if (tanggalISO) {
+        const tanggalFormat = formatTanggalChatJS(tanggalISO);
+
+        // Cek jika format valid DAN beda dari yang terakhir
+        if (tanggalFormat && tanggalFormat !== lastPrintedDate) {
+            dateDividerHTML = `
+            <div class="text-center my-3 chat-date-divider" data-date-string="${escapeHTML(tanggalFormat)}">
+                <span class="bg-gray-200 text-gray-700 text-xs font-semibold px-3 py-1 rounded-full">
+                    ${escapeHTML(tanggalFormat)}
+                </span>
+            </div>
+            `;
+            lastPrintedDate = tanggalFormat; // Update pelacak JS!
+        }
+    }
+    // --- AKHIR LOGIKA DIVIDER ---
 
     // --- PERUBAHAN JS DI SINI ---
     const msg_type = message.message_type || 'text';
@@ -265,10 +428,12 @@ function appendMessage(message) {
     }
     // --- AKHIR PERUBAHAN JS ---
 
+    // Masukkan divider DULU (jika ada), BARU pesannya
+    chatBox.innerHTML += dateDividerHTML;
     chatBox.innerHTML += messageHTML;
 }
 
-// Fungsi utama Long Polling
+// Fungsi utama Long Polling (tidak berubah)
 async function startPolling(lastMessageId) {
     if (!chatBox) return; // Hentikan jika chatbox tidak ada
 
@@ -283,7 +448,7 @@ async function startPolling(lastMessageId) {
         let newLastId = lastMessageId;
         if (newMessages.length > 0) {
             newMessages.forEach(msg => {
-                appendMessage(msg);
+                appendMessage(msg); // appendMessage sekarang sudah pintar
                 newLastId = msg.message_id;
             });
             chatBox.dataset.lastMessageId = newLastId;
@@ -297,7 +462,7 @@ async function startPolling(lastMessageId) {
 }
 
 
-// Intersep Form Kirim Pesan (AJAX)
+// Intersep Form Kirim Pesan (AJAX) (tidak berubah)
 if (chatForm && messageInput) {
     chatForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -321,6 +486,7 @@ if (chatForm && messageInput) {
             const savedMessage = await response.json();
 
             if (savedMessage && savedMessage.message_id) {
+                // appendMessage sekarang sudah pintar, dia akan cek tanggal
                 appendMessage(savedMessage);
                 chatBox.dataset.lastMessageId = savedMessage.message_id;
                 scrollToBottom();
@@ -336,10 +502,20 @@ if (chatForm && messageInput) {
 }
 
 
-// --- Inisialisasi ---
+// --- 4. MODIFIKASI Inisialisasi ---
 if (chatBox) {
     scrollToBottom();
     let initialLastId = parseInt(chatBox.dataset.lastMessageId, 10);
+
+    // SINKRONISASI:
+    // Baca divider tanggal TERAKHIR yang di-render oleh PHP
+    const lastDivider = chatBox.querySelector('.chat-date-divider:last-of-type');
+    if (lastDivider) {
+        // Ambil datanya dan simpan ke pelacak global JS
+        lastPrintedDate = lastDivider.dataset.dateString;
+    }
+
+    // Mulai polling dengan ID dan tanggal terakhir yang sudah sinkron
     startPolling(initialLastId);
 }
 

@@ -67,7 +67,15 @@ function getMessagesByForumId($forum_id) {
     }
 
     // Query 
-    $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, m.message_type, u.nama_lengkap AS sender_nama FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.forum_id = :fid ORDER BY m.created_at ASC";
+// MENJADI:
+$sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, 
+               TO_CHAR(m.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS created_at_iso, 
+               TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, 
+               m.message_type, u.nama_lengkap AS sender_nama 
+        FROM messages m 
+        JOIN users u ON m.sender_id = u.user_id 
+        WHERE m.forum_id = :fid 
+        ORDER BY m.created_at ASC";
 
     $stmt = oci_parse($conn, $sql);
 
@@ -114,8 +122,14 @@ function getMessageById($message_id) {
         return null;
     }
 
-    $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, u.nama_lengkap AS sender_nama FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.message_id = :mid";
-
+    // MENJADI:
+$sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, 
+               TO_CHAR(m.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS created_at_iso, 
+               TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, 
+               u.nama_lengkap AS sender_nama 
+        FROM messages m 
+        JOIN users u ON m.sender_id = u.user_id 
+        WHERE m.message_id = :mid";
     $stmt = oci_parse($conn, $sql);
     
     $clean_id = (int)$message_id;
@@ -152,8 +166,16 @@ function getNewMessagesAfterId($forum_id, $last_message_id) {
     }
 
     // Query 
-    $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, m.message_type, u.nama_lengkap AS sender_nama FROM messages m JOIN users u ON m.sender_id = u.user_id WHERE m.forum_id = :fid AND m.message_id > :last_id ORDER BY m.created_at ASC";
-
+    // MENJADI:
+$sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, 
+               TO_CHAR(m.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS created_at_iso, 
+               TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, 
+               m.message_type, u.nama_lengkap AS sender_nama 
+        FROM messages m 
+        JOIN users u ON m.sender_id = u.user_id 
+        WHERE m.forum_id = :fid AND m.message_id > :last_id 
+        ORDER BY m.created_at ASC";
+        
     $stmt = oci_parse($conn, $sql);
 
     $clean_forum_id = (int)$forum_id;
