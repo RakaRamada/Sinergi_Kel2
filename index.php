@@ -1,18 +1,10 @@
 <?php
-// --------------------------------------------------------------------------
-// KONFIGURASI ERROR & SESSION
-// --------------------------------------------------------------------------
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 session_start();
 require 'app/helpers/utils.php';
 
-// --------------------------------------------------------------------------
-// PENGATURAN HALAMAN & AKSES LOGIN
-// --------------------------------------------------------------------------
-
-// Ambil parameter "page" dari URL, default ke "home" jika tidak ada
 $page = $_GET['page'] ?? 'home';
 
 // Halaman publik yang bisa diakses tanpa login
@@ -24,12 +16,7 @@ if (!isset($_SESSION['id_users']) && !in_array($page, $public_pages)) {
     exit;
 }
 
-// --------------------------------------------------------------------------
 // ROUTER UTAMA
-// --------------------------------------------------------------------------
-
-// Router berfungsi seperti pengarah lalu lintas: 
-// menentukan controller/view mana yang harus dipanggil berdasarkan nilai $page.
 switch ($page) {
     case 'login':
         require 'app/controllers/HomeController.php';
@@ -55,13 +42,21 @@ switch ($page) {
         showPostDetail();
         break;
 
-    // === PERBAIKAN: Gunakan require_once dan nama file yang benar (huruf besar 'P') ===
     case 'profile':
-        require_once 'app/controllers/ProfileController.php';
+        require_once 'app/controllers/profileController.php';
         showProfile();
         break;
-    // === AKHIR PERBAIKAN ===
 
+    case 'edit_profile': 
+        require_once 'app/controllers/profileController.php';
+        showEditProfileForm(); 
+        break;
+
+    case 'update_profile': 
+        require_once 'app/controllers/profileController.php';
+        processProfileUpdate();
+        break;
+        
     case 'search':
         require 'app/views/search.php';
         break;

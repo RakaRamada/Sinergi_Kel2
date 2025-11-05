@@ -3,10 +3,6 @@
 <script>
     // Jalankan kode hanya setelah semua HTML dimuat
     document.addEventListener('DOMContentLoaded', function() {
-
-        // ==================================================
-        // BAGIAN 1: FUNGSI MEMUAT POSTINGAN (READ)
-        // ==================================================
         const postFeedContainer = document.getElementById('post-feed-container');
 
         function loadPosts() {
