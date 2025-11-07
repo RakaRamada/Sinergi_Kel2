@@ -36,6 +36,17 @@ function showLogin() {
  * Memproses data dari form login (Menggunakan Email).
  */
 function doLogin() {
+
+    if (!isset($_POST['captcha_code']) || empty($_POST['captcha_code'])) {
+        $pesan = "CAPTCHA tidak boleh kosong!";
+        require __DIR__ . '/../views/login.php'; // Tampilkan login lagi dgn pesan error
+        exit(); 
+    
+    } else if (!isset($_SESSION["code"]) || $_SESSION["code"] != $_POST['captcha_code']) {
+        $pesan = "Kode CAPTCHA Anda salah!";
+        require __DIR__ . '/../views/login.php'; // Tampilkan login lagi dgn pesan error
+        exit();
+    }
     
     // 1. Ambil data dari form
     $email = trim($_POST['email'] ?? '');

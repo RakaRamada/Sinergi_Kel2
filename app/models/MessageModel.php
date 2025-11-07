@@ -3,14 +3,17 @@
 
 /**
  * Menyimpan pesan baru ke database.
- * --- VERSI DIPERBARUI (Tanpa EMPTY_CLOB) ---
+ * --- VERSI BARU: Bisa menangani Teks, Gambar, dan Dokumen ---
  *
- * @param int $forum_id ID forum tujuan.
- * @param int $sender_id ID pengguna yang mengirim.
- * @param string $isi_pesan Teks pesan.
+ * @param int $forum_id ID forum
+ * @param int $sender_id ID pengirim
+ * @param string $isi_pesan Teks pesan (atau caption)
+ * @param string $message_type 'text', 'image', atau 'document'
+ * @param string|null $file_path Nama file unik di server
+ * @param string|null $original_filename Nama file asli dari user
  * @return int|false ID pesan baru jika berhasil, false jika gagal.
  */
-function createMessage($forum_id, $sender_id, $isi_pesan) {
+function createMessage($forum_id, $sender_id, $isi_pesan, $message_type, $file_path, $original_filename) {
     require __DIR__ . '/../../config/koneksi.php';
     if (!$conn) {
         error_log("Koneksi DB tidak tersedia di createMessage.");
@@ -19,11 +22,15 @@ function createMessage($forum_id, $sender_id, $isi_pesan) {
 
     $new_message_id = 0; // Siapkan variabel untuk menampung ID
 
-    // --- PERBAIKAN SQL ---
-    // Kita tidak pakai EMPTY_CLOB(). Kita insert string langsung.
-    // Ini adalah satu query sederhana yang auto-commit.
-    $sql = "INSERT INTO messages (forum_id, sender_id, isi_pesan, created_at)
-            VALUES (:fid, :sid, :isi_pesan, SYSDATE)
+    // Query INSERT sekarang menyertakan 4 kolom baru
+    $sql = "INSERT INTO messages (
+                forum_id, sender_id, isi_pesan, message_type, 
+                file_path, original_filename, created_at
+            )
+            VALUES (
+                :fid, :sid, :isi_pesan, :msg_type, 
+                :file_path, :orig_filename, SYSDATE
+            )
             RETURNING message_id INTO :new_id";
 
     $stmt = oci_parse($conn, $sql);
@@ -31,21 +38,27 @@ function createMessage($forum_id, $sender_id, $isi_pesan) {
     $clean_forum_id = (int)$forum_id;
     $clean_sender_id = (int)$sender_id;
 
+    // Bind parameter dasar
     oci_bind_by_name($stmt, ':fid', $clean_forum_id, -1, SQLT_INT);
     oci_bind_by_name($stmt, ':sid', $clean_sender_id, -1, SQLT_INT);
-    // Bind isi_pesan sebagai string. Oracle akan otomatis konversi ke CLOB.
-    oci_bind_by_name($stmt, ':isi_pesan', $isi_pesan, -1, SQLT_CHR);
+    oci_bind_by_name($stmt, ':msg_type', $message_type);
+
+    // Bind parameter baru (CLOB untuk isi_pesan, sisanya string)
+    // Kita tetap pakai cara ini untuk isi_pesan (caption)
+    oci_bind_by_name($stmt, ':isi_pesan', $isi_pesan, -1, SQLT_CHR); 
+    oci_bind_by_name($stmt, ':file_path', $file_path);
+    oci_bind_by_name($stmt, ':orig_filename', $original_filename);
+
+    // Bind ID baru
     oci_bind_by_name($stmt, ':new_id', $new_message_id, -1, SQLT_INT);
 
-    // Eksekusi (dengan auto-commit standar, BUKAN OCI_NO_AUTO_COMMIT)
+    // Eksekusi (dengan auto-commit standar)
     if (!oci_execute($stmt)) {
          $e = oci_error($stmt);
          error_log("OCI8 Error in createMessage execute: " . $e['message']);
          @oci_close($conn);
          return false;
     }
-
-    // Tidak perlu save CLOB atau commit manual
     
     oci_free_statement($stmt);
     @oci_close($conn);
@@ -71,7 +84,8 @@ function getMessagesByForumId($forum_id) {
 $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, 
                TO_CHAR(m.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS created_at_iso, 
                TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, 
-               m.message_type, u.nama_lengkap AS sender_nama 
+               m.message_type, m.file_path, m.original_filename, 
+               u.nama_lengkap AS sender_nama 
         FROM messages m 
         JOIN users u ON m.sender_id = u.user_id 
         WHERE m.forum_id = :fid 
@@ -126,10 +140,12 @@ function getMessageById($message_id) {
 $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, 
                TO_CHAR(m.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS created_at_iso, 
                TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, 
+               m.message_type, m.file_path, m.original_filename, 
                u.nama_lengkap AS sender_nama 
         FROM messages m 
         JOIN users u ON m.sender_id = u.user_id 
         WHERE m.message_id = :mid";
+        
     $stmt = oci_parse($conn, $sql);
     
     $clean_id = (int)$message_id;
@@ -170,7 +186,8 @@ function getNewMessagesAfterId($forum_id, $last_message_id) {
 $sql = "SELECT m.message_id, m.forum_id, m.sender_id, m.isi_pesan, 
                TO_CHAR(m.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS') AS created_at_iso, 
                TO_CHAR(m.created_at, 'HH24:MI') AS created_at_time, 
-               m.message_type, u.nama_lengkap AS sender_nama 
+               m.message_type, m.file_path, m.original_filename, 
+               u.nama_lengkap AS sender_nama 
         FROM messages m 
         JOIN users u ON m.sender_id = u.user_id 
         WHERE m.forum_id = :fid AND m.message_id > :last_id 

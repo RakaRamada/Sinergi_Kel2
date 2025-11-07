@@ -9,6 +9,13 @@ require_once __DIR__ . '/../models/ForumModel.php';
  * Fungsi untuk menampilkan halaman pesan (daftar forum/chat forum).
  */
 function showMessages() {
+    // --- PERBAIKAN PRG (POST-REDIRECT-GET) ---
+    // Jika ada yang mencoba POST ke halaman ini...
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        //...tendang mereka kembali ke halaman ini via GET
+        header('Location: ' . $_SERVER['REQUEST_URI']);
+        exit();
+    }
     // 0. Mulai session (Sangat penting untuk mendapatkan $_SESSION['user_id'])
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
@@ -48,41 +55,106 @@ function showMessages() {
 
 /**
  * Menyimpan pesan baru yang dikirim dari form (via AJAX).
- * Tidak lagi me-redirect, tapi mengembalikan JSON.
+ * -- VERSI BARU: Bisa menangani Teks dan File Upload --
  */
 function storeMessage() {
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
 
-    // 1. Validasi
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id'])) {
+    // 1. Validasi dasar
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_SESSION['user_id'])) {
+        header('Content-Type: application/json');
+        http_response_code(403); // Forbidden
+        echo json_encode(['error' => 'Akses ditolak']);
+        exit();
+    }
+
+    // 2. Ambil data dasar
+    $forum_id = (int)$_POST['forum_id'];
+    $sender_id = (int)$_SESSION['user_id'];
+    $isi_pesan = trim($_POST['isi_pesan'] ?? ''); // Ini adalah caption atau teks
+    $file = $_FILES['file_upload'] ?? null;       // Ini adalah file yang di-upload
+
+    // 3. Validasi: Pesan tidak boleh kosong JIKA tidak ada file
+    if (empty($isi_pesan) && (empty($file) || $file['error'] !== UPLOAD_ERR_OK)) {
+        header('Content-Type: application/json');
+        http_response_code(400); // Bad Request
+        echo json_encode(['error' => 'Pesan atau file tidak boleh kosong']);
+        exit();
+    }
+
+    // 4. Siapkan variabel untuk Model (default-nya adalah 'text')
+    $message_type = 'text';
+    $file_path_to_db = null;
+    $original_filename = null;
+
+    // 5. Logika jika ADA FILE yang di-upload
+    if ($file && $file['error'] === UPLOAD_ERR_OK) {
         
-        $forum_id = (int)$_POST['forum_id'];
-        $isi_pesan = $_POST['isi_pesan']; 
-        $sender_id = (int)$_SESSION['user_id'];
+        // Tentukan folder upload (PASTIKAN FOLDER INI ADA DAN BISA DITULIS)
+        $upload_dir = 'public/uploads/forum_files/'; 
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0775, true); // Coba buat folder jika tidak ada
+        }
 
-        if (!empty($forum_id) && !empty($isi_pesan) && !empty($sender_id)) {
-            
-            // 2. Panggil Model untuk menyimpan (Model kita sekarang mengembalikan ID)
-            $newMessageId = createMessage($forum_id, $sender_id, $isi_pesan);
-            
-            if ($newMessageId) {
-                // 3. Berhasil disimpan! Ambil data lengkap pesan baru itu.
-                $newMessageData = getMessageById($newMessageId);
+        $original_filename = basename($file['name']);
+        $extension = strtolower(pathinfo($original_filename, PATHINFO_EXTENSION));
+        
+        // Buat nama file yang unik untuk disimpan di server
+        $file_path_to_db = uniqid('file_', true) . '.' . $extension;
+        $destination = $upload_dir . $file_path_to_db;
 
-                // 4. Kirim data lengkap itu kembali ke JavaScript sebagai JSON
-                header('Content-Type: application/json');
-                echo json_encode($newMessageData);
-                exit();
-            }
+        // Tentukan message_type berdasarkan ekstensi
+        $image_types = ['jpg', 'jpeg', 'png', 'gif'];
+        $doc_types = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'];
+
+        if (in_array($extension, $image_types)) {
+            $message_type = 'image';
+        } elseif (in_array($extension, $doc_types)) {
+            $message_type = 'document';
+        } else {
+            // Jika tipe file tidak dikenal (tidak sesuai 'accept' di HTML/JS)
+            header('Content-Type: application/json');
+            http_response_code(400);
+            echo json_encode(['error' => 'Tipe file tidak diizinkan.']);
+            exit();
+        }
+
+        // Pindahkan file dari 'tmp' ke folder 'forum_files'
+        if (!move_uploaded_file($file['tmp_name'], $destination)) {
+            header('Content-Type: application/json');
+            http_response_code(500);
+            echo json_encode(['error' => 'Gagal menyimpan file di server.']);
+            exit();
         }
     }
     
-    // Jika gagal, kirim error JSON
+    // 6. Panggil Model (Langkah 5)
+    // Kita akan ubah createMessage() agar menerima parameter baru
+    $newMessageId = createMessage(
+        $forum_id, 
+        $sender_id, 
+        $isi_pesan, 
+        $message_type, 
+        $file_path_to_db, 
+        $original_filename
+    );
+    
+    if ($newMessageId) {
+        // 7. Berhasil! Ambil data lengkap (Model getMessageById juga akan kita update)
+        $newMessageData = getMessageById($newMessageId);
+
+        // 8. Kirim data lengkap itu kembali ke JavaScript sebagai JSON
+        header('Content-Type: application/json');
+        echo json_encode($newMessageData);
+        exit();
+    }
+    
+    // Jika gagal (misal $newMessageId = false)
     header('Content-Type: application/json');
-    http_response_code(400); // Bad Request
-    echo json_encode(['error' => 'Gagal menyimpan pesan']);
+    http_response_code(500); // Internal Server Error
+    echo json_encode(['error' => 'Gagal menyimpan pesan ke database']);
     exit();
 }
 

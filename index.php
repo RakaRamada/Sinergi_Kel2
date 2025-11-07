@@ -13,11 +13,11 @@ if (session_status() === PHP_SESSION_NONE) {
 // --------------------------------------------------------------------------
 $is_logged_in = isset($_SESSION['user_id']);
 $page = $_GET['page'] ?? ($is_logged_in ? 'dashboard' : 'login');
-$public_pages = ['login', 'login-process', 'register', 'register-process', 'verify'];
+$public_pages = ['login', 'login-process', 'register', 'register-process', 'verify', 'captcha'];
 
 // --- PERBAIKAN: Daftar halaman API (JSON) ---
 // Halaman ini TIDAK BOLEH memuat HTML (header/footer)
-$api_pages = ['store-message', 'check-new-messages', 'store-forum', 'join-forum'];
+$api_pages = ['store-message', 'check-new-messages', 'store-forum', 'join-forum', 'captcha'];
 // ----------------------------------------
 
 if (!$is_logged_in && !in_array($page, $public_pages)) {
@@ -67,6 +67,11 @@ switch ($page) {
         break;
         
     // --- Kasus Halaman API (HANYA JSON) ---
+
+    case 'captcha':
+        require_once 'app/helpers/captcha.php';
+        break;
+
     case 'store-message':
         require_once 'app/controllers/MessageController.php';
         storeMessage();

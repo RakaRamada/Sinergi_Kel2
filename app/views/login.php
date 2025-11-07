@@ -32,26 +32,54 @@
                 endif; 
                 ?>
                 <form action="index.php?page=login-process" method="POST" class="space-y-4">
+
                     <div>
-                        <label for="email" class="sr-only">Email</label>
+                        <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
                         <input type="email" id="email" name="email" placeholder="Email" required
                             class="w-full border border-gray-300 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <div class="relative">
-                        <label for="password" class="sr-only">Password</label>
-                        <input type="password" id="password" name="password" placeholder="Password" required
-                            class="w-full border border-gray-300 rounded-lg py-3 px-4 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <span class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer"
-                            onclick="togglePasswordVisibility()">
-                            <img id="togglePasswordIcon" src="public/assets/icons/eyeClosed.svg"
-                                alt="Toggle password visibility" class="w-5 h-5 text-gray-400">
-                        </span>
+
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                        <div class="relative">
+                            <input type="password" id="password" name="password" placeholder="Password" required
+                                class="w-full border border-gray-300 rounded-lg py-3 px-4 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <span class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer"
+                                onclick="togglePasswordVisibility()">
+                                <img id="togglePasswordIcon" src="public/assets/icons/eyeClosed.svg"
+                                    alt="Toggle password visibility" class="w-5 h-5 text-gray-400">
+                            </span>
+                        </div>
                     </div>
                     <div class="text-right text-sm">
                         <a href="#" class="font-semibold text-blue-600 hover:underline">
                             Lupa password?
                         </a>
                     </div>
+
+                    <div class="flex items-center space-x-4">
+                        <div class="w-2/3">
+                            <label for="captcha_code" class="block text-sm font-medium text-gray-700 mb-1">Masukkan Kode
+                                Captcha</label>
+                            <input type="text" id="captcha_code" name="captcha_code" required
+                                class="w-full border border-gray-300 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="Masukkan Kode">
+                        </div>
+
+                        <div class="w-1/3 mt-4 flex items-center space-x-2">
+
+                            <img src="index.php?page=captcha" alt="Captcha"
+                                class="rounded-lg h-[50px] flex-1 object-cover border border-gray-300"
+                                id="captcha_image"> <button type="button" onclick="refreshCaptcha()"
+                                class="p-3 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                title="Refresh Captcha">
+                                <img src="/Sinergi/public/assets/icons/refresh.svg" alt="refresh" class="w-5 h-5">
+                            </button>
+
+                        </div>
+                    </div>
+
+
                     <button type="submit" name="login"
                         class="w-full bg-gray-900 text-white font-bold rounded-lg py-3 mt-4 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-opacity-50">
                         Sign In
@@ -75,8 +103,21 @@
             toggleIcon.src = 'public/assets/icons/eyeOpen.svg';
         } else {
             passwordField.type = 'password';
-            toggleIcon.src = 'public/Vpublic/assets/icons/eyeClosed.svg';
+            toggleIcon.src = 'public/assets/icons/eyeClosed.svg';
         }
+    }
+
+    // FUNGSI BARU UNTUK REFRESH CAPTCHA
+    function refreshCaptcha() {
+        // 1. Ambil elemen gambar captcha berdasarkan ID-nya
+        const captchaImage = document.getElementById('captcha_image');
+
+        // 2. Buat timestamp unik (ini trik 'cache-busting')
+        const timestamp = new Date().getTime();
+
+        // 3. Set 'src' gambar ke URL yang sama + parameter timestamp
+        // Ini memaksa browser meminta gambar baru ke server, bukan dari cache
+        captchaImage.src = 'index.php?page=captcha&t=' + timestamp;
     }
     </script>
 </body>
