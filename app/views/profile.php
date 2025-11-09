@@ -70,4 +70,3 @@ require 'app/views/partials/header.php';
 require 'app/views/partials/sidebar_kanan.php'; 
 require 'app/views/partials/footer.php'; 
 ?>
-

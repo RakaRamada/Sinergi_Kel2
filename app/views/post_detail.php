@@ -1,5 +1,4 @@
 <?php 
-require 'app/views/partials/header.php'; 
 ?>
 
 <main class="col-span-6 border-r border-gray-200">
@@ -87,6 +86,5 @@ require 'app/views/partials/header.php';
 </main>
 
 <?php 
-require 'app/views/partials/sidebar_kanan.php'; 
-require 'app/views/partials/footer.php'; 
+require 'app/views/partials/sidebar_kanan.php';  
 ?>

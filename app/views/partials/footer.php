@@ -1,6 +1,11 @@
+<?php
+// File: app/views/partials/footer.php
+?>
+
 </div>
 </div>
 <script>
+<<<<<<< HEAD
     // Jalankan kode hanya setelah semua HTML dimuat
     document.addEventListener('DOMContentLoaded', function() {
         const postFeedContainer = document.getElementById('post-feed-container');
@@ -114,6 +119,21 @@
                 reader.onload = function(e) {
                     imagePreview.setAttribute('src', e.target.result);
                     imagePreviewContainer.classList.remove('hidden');
+=======
+// --- Skrip untuk Tombol Komentar (Script Global Anda) ---
+const commentButtons = document.querySelectorAll('.comment-button');
+commentButtons.forEach(button => {
+    button.addEventListener('click', function() {
+        const postId = this.dataset.postId;
+        const commentSection = document.getElementById('comment-section-' + postId);
+
+        if (commentSection) {
+            commentSection.classList.toggle('hidden');
+            if (!commentSection.classList.contains('hidden')) {
+                const textarea = commentSection.querySelector('textarea');
+                if (textarea) {
+                    textarea.focus();
+>>>>>>> 00fa24f135bcb4eb5f2eb523ef20a12f45df9fa1
                 }
                 reader.readAsDataURL(file);
             } else {

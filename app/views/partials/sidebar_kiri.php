@@ -2,7 +2,6 @@
     <div class="flex flex-col items-end h-screen py-6 sticky top-0">
         <?php
         // Ambil nama halaman saat ini dari URL.
-        // Jika parameter 'page' tidak ada, kita anggap halaman default adalah 'dashboard'.
         $currentPage = $_GET['page'] ?? 'dashboard';
         ?>
 
@@ -36,10 +35,10 @@
                 <img src="/Sinergi/public/assets/icons/chat.svg" alt="Pesan" class="w-7 h-7">
             </a>
 
-            <a href="index.php?page=profile" title="Profil"
+            <a href="index.php?page=settings" title="Pengaturan"
                 class="w-12 h-12 flex items-center justify-center rounded-lg 
-                      <?php echo ($currentPage == 'profile') ? 'bg-gray-200 text-black' : 'text-gray-500 hover:bg-gray-100'; ?>">
-                <img src="/Sinergi/public/assets/icons/profile.svg" alt="Profil" class="w-7 h-7">
+                      <?php echo ($currentPage == 'settings') ? 'bg-gray-200 text-black' : 'text-gray-500 hover:bg-gray-100'; ?>">
+                <img src="/Sinergi/public/assets/icons/settings.svg" alt="Pengaturan" class="w-7 h-7">
             </a>
         </div>
 

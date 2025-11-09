@@ -1,9 +1,12 @@
 <?php 
+<<<<<<< HEAD
 // 1. Memanggil header (membuka HTML, body, container, grid, dan menampilkan sidebar kiri)
 require 'app/views/partials/header.php'; 
 
 // Ambil avatar user dari session untuk form postingan
 $user_avatar = $_SESSION['avatar_url'] ?? '/Sinergi/public/assets/images/default_avatar.png'; 
+=======
+>>>>>>> 00fa24f135bcb4eb5f2eb523ef20a12f45df9fa1
 ?>
 
 <main class="col-span-6 border-r border-gray-200">
@@ -82,6 +85,4 @@ if (($_GET['view'] ?? 'teman') === 'komunitas') {
     require 'app/views/partials/sidebar_teman.php';
 }
 
-// 4. Memanggil footer (berisi skrip JS dan tag penutup HTML)
-require 'app/views/partials/footer.php'; 
 ?>

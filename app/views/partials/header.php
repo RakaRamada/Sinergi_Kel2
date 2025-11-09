@@ -15,5 +15,5 @@
 
 
             <?php 
-require 'app/views/partials/sidebar_kiri.php'; 
+require 'app/views/partials/sidebar_kiri.php';
 ?>
