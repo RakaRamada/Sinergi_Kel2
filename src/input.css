@@ -1,1 +1,19 @@
+/* File: public/src/input.css
+  GANTI TOTAL ISINYA DENGAN INI:
+*/
+
+/* 1. Import tema default Flowbite (HARUS DI ATAS) */
+@import "flowbite/src/themes/default";
+
+/* 2. Import Tailwind (Ini adalah milikmu) */
 @import "tailwindcss";
+
+/* 3. Daftarkan plugin Flowbite */
+@plugin "flowbite/plugin";
+
+/* 4. Beri tahu Tailwind di mana file Flowbite berada */
+/* Path ini naik 2 level (dari src -> public -> sinergi) */
+@source "../node_modules/flowbite";
+
+/* (Jika kamu punya custom CSS lain, letakkan di bawah sini)
+*/

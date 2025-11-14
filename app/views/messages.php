@@ -6,58 +6,61 @@ $current_forum_id = isset($_GET['forum_id']) ? (int)$_GET['forum_id'] : null;
 
 // --- TAMBAHKAN FUNGSI HELPER INI ---
 if (!function_exists('formatTanggalChat')) {
-    /**
-     * Mengubah tanggal ISO menjadi format chat (Hari ini, Kemarin, dll.)
-     * @param string $tanggal_iso String tanggal dari DB (format: YYYY-MM-DDTHH:MI:SS)
-     * @return string|null Teks yang akan ditampilkan sebagai divider
-     */
     function formatTanggalChat($tanggal_iso) {
         if (!$tanggal_iso) return null;
         
         try {
-            // PENTING: Atur zona waktu server kamu. 
-            // Jika server dan user di Indonesia, 'Asia/Jakarta' adalah pilihan aman.
+            // 1. Set zona waktu (ini penting untuk 'now')
             $tz = new DateTimeZone('Asia/Jakarta');
             
-            // 1. Buat patokan waktu "Hari Ini" (jam 00:00)
-            $today = new DateTime('now', $tz);
-            $today->setTime(0, 0, 0); // Reset ke awal hari
+            // 2. Dapatkan tanggal HARI INI sebagai string 'Y-m-d'
+            $today_str = (new DateTime('now', $tz))->format('Y-m-d');
+            
+            // 3. Dapatkan tanggal KEMARIN sebagai string 'Y-m-d'
+            $yesterday_str = (new DateTime('yesterday', $tz))->format('Y-m-d');
 
-            // 2. Buat waktu pesan dari data ISO (misal: '2025-11-04T18:44:00')
-            $messageDate = new DateTime($tanggal_iso, $tz);
-            $messageDate->setTime(0, 0, 0); // Reset ke awal hari juga
+            // 4. Ambil HANYA bagian tanggal (Y-m-d) dari string ISO
+            $msg_date_str = substr($tanggal_iso, 0, 10); // Hasil: '2025-11-14'
 
-            // 3. Hitung selisih hari
-            $diff = $today->diff($messageDate);
-            $diffDays = (int)$diff->format('%r%a'); // %r%a memberi tanda (misal -1 untuk kemarin)
-
-            // 4. Tentukan logikanya
-            if ($diffDays === 0) {
+            // 5. Bandingkan string-nya (JAUH LEBIH AMAN)
+            if ($msg_date_str === $today_str) {
                 return 'Hari ini';
-            } elseif ($diffDays === -1) {
+            } elseif ($msg_date_str === $yesterday_str) {
                 return 'Kemarin';
-            } elseif ($diffDays > -7) {
-                // Jika masih dalam 7 hari terakhir, tampilkan nama harinya
-                // Kita buat manual agar tidak bergantung 'locale' server
-                $hari = [
-                    'Sunday'    => 'Minggu',
-                    'Monday'    => 'Senin',
-                    'Tuesday'   => 'Selasa',
-                    'Wednesday' => 'Rabu',
-                    'Thursday'  => 'Kamis',
-                    'Friday'    => 'Jumat',
-                    'Saturday'  => 'Sabtu'
-                ];
-                $namaHariInggris = $messageDate->format('l'); // 'l' = nama hari lengkap (misal: 'Tuesday')
-                return $hari[$namaHariInggris] ?? $namaHariInggris; // 'Selasa'
-            } else {
-                // Jika sudah lama, tampilkan tanggal lengkap
-                return $messageDate->format('d/m/Y'); // Format: 04/11/2025
             }
+            
+            // 6. Jika bukan keduanya, baru kita ubah formatnya
+            $msgDateObj = new DateTime($tanggal_iso, $tz);
+            
+            // Hitung selisih hari (pakai strtotime yang lebih universal)
+            $today_time = strtotime($today_str); // Waktu 00:00 hari ini
+            $msg_time = strtotime($msg_date_str);   // Waktu 00:00 pesan
+            
+            // Perhitungan selisih hari manual
+            $diff_seconds = $today_time - $msg_time;
+            $diff_days_manual = $diff_seconds / (60 * 60 * 24); 
+
+            // --- INI ADALAH PERBAIKANNYA ---
+            // Cek apakah selisihnya antara 2 s/d 6 hari
+            if ($diff_days_manual > 1 && $diff_days_manual < 7) { 
+                $hari = [
+                    'Sunday' => 'Minggu', 'Monday' => 'Senin', 'Tuesday' => 'Selasa',
+                    'Wednesday' => 'Rabu', 'Thursday' => 'Kamis', 'Friday' => 'Jumat', 'Saturday' => 'Sabtu'
+                ];
+                return $hari[$msgDateObj->format('l')] ?? $msgDateObj->format('l');
+            } else {
+                // Jika lebih dari seminggu (atau error), tampilkan tanggal
+                return $msgDateObj->format('d/m/Y');
+            }
+
         } catch (Exception $e) {
-            // Jika format tanggalnya aneh, jangan tampilkan apa-apa
-            error_log('Error formatTanggalChat: ' . $e->getMessage());
-            return null;
+            error_log('Error formatTanggalChat (V-Final): ' . $e->getMessage());
+            // Fallback jika ada error, tampilkan tanggal saja
+            try {
+                return (new DateTime($tanggal_iso))->format('d/m/Y');
+            } catch (Exception $ex) {
+                return null; // Gagal total
+            }
         }
     }
 }
@@ -118,7 +121,7 @@ if (!function_exists('formatTanggalChat')) {
     </div>
 </main>
 
-<aside class="col-span-6 flex flex-col h-screen">
+<aside class="col-span-6 flex flex-col h-screen relative">
 
     <?php if (isset($forumInfo) && is_array($forumInfo) && !empty($forumInfo)): ?>
 
@@ -152,47 +155,55 @@ if (!function_exists('formatTanggalChat')) {
         </div>
     </a>
 
+    <div id="sticky-date-header"
+        class="absolute top-20 left-0 right-3 z-10 text-center py-1 transition-all duration-200"
+        style="opacity: 0; transform: translateY(-100%);">
+        <span class="bg-gray-200 text-gray-700 text-xs font-semibold px-3 py-1 rounded-full shadow-md">
+        </span>
+    </div>
     <?php
     // Ambil ID pesan terakhir (kode ini sudah ada)
     $last_message_id = 0;
     if (isset($messages) && !empty($messages)) {
         $last_message_id = end($messages)['message_id'] ?? 0;
     }
-    ?>
-
-    <div id="chat-box" class="flex-grow p-6 overflow-y-auto space-y-4 bg-gray-50"
+    ?> <div id="chat-box" class="flex-grow p-6 overflow-y-auto space-y-4 bg-gray-50"
         data-last-message-id="<?= $last_message_id ?>">
 
         <?php if (isset($messages) && is_array($messages) && !empty($messages)): ?>
 
-        <?php 
-        // Variabel pelacak tanggal (dari langkah sebelumnya)
-        $tanggal_divider_terakhir = ''; 
+        <?php
+        // --- AWAL BLOK BARU (LEBIH KUAT) ---
+        // Kita ubah loop-nya untuk mendapatkan $i (index)
         ?>
-
-        <?php foreach ($messages as $message): ?>
+        <?php foreach ($messages as $i => $message): ?>
 
         <?php
-            // Logika divider tanggal (dari langkah sebelumnya)
-            $tanggal_pesan_raw = $message['created_at_iso'] ?? null;
-            $tanggal_pesan_format = formatTanggalChat($tanggal_pesan_raw);
+            // 1. Ambil tanggal pesan ini
+            $tanggal_pesan_ini = formatTanggalChat($message['created_at_iso'] ?? null);
+            $tanggal_pesan_sebelumnya = null;
 
-            if ($tanggal_pesan_format && $tanggal_pesan_format !== $tanggal_divider_terakhir):
-            ?>
-        <div class="text-center my-3 chat-date-divider"
-            data-date-string="<?= htmlspecialchars($tanggal_pesan_format) ?>">
+            // 2. Jika ini bukan pesan pertama ($i > 0), ambil tanggal pesan sebelumnya
+            if ($i > 0) {
+                // Kita akses $messages[$i-1] untuk pesan sebelumnya
+                $tanggal_pesan_sebelumnya = formatTanggalChat($messages[$i-1]['created_at_iso'] ?? null);
+            }
+
+            // 3. Tampilkan divider HANYA jika tanggalnya ada DAN tidak sama dengan tanggal sebelumnya
+            // INI ADALAH LOGIKA YANG BENAR: h-0 opacity-0
+            if ($tanggal_pesan_ini && $tanggal_pesan_ini !== $tanggal_pesan_sebelumnya):
+    ?>
+        <div class="text-center chat-date-divider my-2" data-date-string="<?= htmlspecialchars($tanggal_pesan_ini) ?>">
             <span class="bg-gray-200 text-gray-700 text-xs font-semibold px-3 py-1 rounded-full">
-                <?= htmlspecialchars($tanggal_pesan_format) ?>
+                <?= htmlspecialchars($tanggal_pesan_ini) ?>
             </span>
         </div>
         <?php
-                $tanggal_divider_terakhir = $tanggal_pesan_format; 
-            endif;
-            // --- AKHIR LOGIKA TANGGAL ---
-            ?>
+    endif;
+    ?>
 
         <?php 
-            // --- LOGIKA RENDER PESAN BARU ---
+            // --- GANTI TOTAL BLOK DEFINISI VARIABEL INI ---
             $msg_type = $message['message_type'] ?? 'text';
             $msg_id = $message['message_id'] ?? 0; 
             $sender_id = $message['sender_id'] ?? null;
@@ -202,17 +213,93 @@ if (!function_exists('formatTanggalChat')) {
             $current_user_id = $_SESSION['user_id'] ?? null;
             $is_my_message = ($sender_id == $current_user_id);
 
-            // Data file (BARU)
-            $file_path = $message['file_path'] ?? null;
-            $original_filename = $message['original_filename'] ?? null;
+            // Data file (aman)
+            $file_path = $message['file_path'] ?? '';
+            $original_filename = $message['original_filename'] ?? ''; // <-- DIPERBAIKI
             $file_url = '/Sinergi/public/uploads/forum_files/' . $file_path;
 
-            // Tentukan kelas CSS berdasarkan pengirim
-            $bubble_class = $is_my_message ? 'bg-blue-500 text-white' : 'bg-gray-200';
-            $time_class = $is_my_message ? 'text-blue-100' : 'text-gray-500';
+            // Data Reply (aman)
+            $reply_to_id = $message['reply_to_message_id'] ?? null;
+            $replied_text = $message['replied_message_text'] ?? ''; // <-- DIPERBAIKI
+            $replied_sender = $message['replied_sender_nama'] ?? ''; // <-- DIPERBAIKI
+            // --- AKHIR BLOK ---
+
+            // Tentukan kelas CSS (Tidak berubah)
+            $bubble_class = $is_my_message ? 'bg-gray-800 text-gray-100' : 'bg-gray-200';
+            $time_class = $is_my_message ? 'text-gray-400' : 'text-gray-500';
             $align_class = $is_my_message ? 'justify-end' : 'justify-start';
-            $sender_name_html = !$is_my_message ? '<p class="text-xs font-semibold mb-1 text-blue-600">' . htmlspecialchars($sender_nama) . '</p>' : '';
+            $sender_name_html = !$is_my_message ? '<p class="text-xs font-semibold mb-1 text-gray-800">' . htmlspecialchars($sender_nama) . '</p>' : '';
             $caption_html = !empty($isi_pesan_string) ? '<p class="mt-2 text-sm">' . htmlspecialchars($isi_pesan_string) . '</p>' : '';
+
+            // HTML Kotak Balasan (Tidak berubah)
+            $reply_box_html = '';
+            if ($reply_to_id && $replied_sender) {
+                $replied_sender_display = ($replied_sender == $_SESSION['nama_lengkap']) ? 'Anda' : htmlspecialchars($replied_sender);
+                $reply_box_html = '
+                <div class="mb-2 p-2 rounded-md bg-black/10 text-sm opacity-80">
+                    <p class="font-semibold text-xs text-gray-100">Membalas ' . $replied_sender_display . '</p>
+                    <p class="truncate">' . htmlspecialchars($replied_text) . '</p>
+                </div>
+                ';
+            }
+
+         
+            // ... (kode $reply_box_html) ...
+
+            /// --- GANTI TOTAL BLOK INI ---
+            
+            // Tentukan data apa yang akan dibalas
+            $reply_data_text = ($msg_type === 'text') ? $isi_pesan_string : $original_filename;
+
+            // Kita siapkan data untuk tombol Hapus
+            $delete_button_html = '';
+            if ($is_my_message) {
+                $delete_button_html = '
+                <li>
+                    <a href="#" 
+                       class="btn-flowbite-delete flex items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                       data-message-id="' . $msg_id . '">
+                        <svg class="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.496 0c-.34.052-.68.107-1.022.166m11.474 0a48.108 48.108 0 00-3.478-.397m-7.496 0c-.34.052-.68.107-1.022.166" />
+                        </svg>
+                        Hapus
+                    </a>
+                </li>';
+            }
+
+            // Ini adalah HTML trigger BARU
+            $trigger_btn_html = '
+            <button type="button" 
+                    id="dropdown-btn-' . $msg_id . '" 
+                    data-dropdown-toggle="dropdown-menu-' . $msg_id . '"
+                    class="fb-dropdown-btn absolute top-1 right-1 p-1 rounded-full 
+                           opacity-0 group-hover:opacity-100 
+                           bg-black/20 hover:bg-black/40 backdrop-blur-sm 
+                           transition-all duration-150 cursor-pointer">
+                <svg class="w-6 h-6 text-white drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" fill-rule="evenodd"></path>
+                </svg>
+            </button>
+
+            <div id="dropdown-menu-' . $msg_id . '" class="hidden z-50 bg-white rounded-lg shadow-lg w-56 py-2">
+                <ul class="py-1 text-sm text-gray-700">
+                    <li>
+                        <a href="#" 
+                           class="btn-flowbite-reply flex items-center px-4 py-2 hover:bg-gray-100"
+                           data-message-id="' . $msg_id . '"
+                           data-reply-name="' . htmlspecialchars($sender_nama) . '"
+                           data-reply-text="' . htmlspecialchars($reply_data_text) . '">
+                            <svg class="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                            </svg>
+                            Balas
+                        </a>
+                    </li>
+                    ' . $delete_button_html . ' </ul>
+            </div>
+            ';
+            // --- AKHIR BLOK BARU ---
+
 
             switch ($msg_type):
                 
@@ -229,29 +316,33 @@ if (!function_exists('formatTanggalChat')) {
 
                 // --- KASUS: PESAN GAMBAR ---
                 case 'image':
-            ?>
+?>
         <div class="flex <?= $align_class ?>" id="message-<?= $msg_id ?>">
-            <div class="<?= $bubble_class ?> p-2 rounded-lg max-w-[70%]">
+            <div class="group relative <?= $bubble_class ?> p-2 rounded-lg max-w-[70%] break-words">
                 <?= $sender_name_html ?>
+                <?= $reply_box_html ?>
                 <a href="<?= $file_url ?>" target="_blank" class="cursor-pointer">
-                    <img src="<?= $file_url ?>" alt="<?= htmlspecialchars($original_filename) ?>"
-                        class="rounded-md w-64 h-64 object-cover">
+                    <img src="<?= $file_url ?>" alt="<?= htmlspecialchars($original_filename) ?>" class="rounded-md"
+                        style="max-width: 384px; max-height: 384px;">
                 </a>
                 <?= $caption_html ?>
                 <div class="text-xs <?= $time_class ?> mt-1 text-right">
                     <?= htmlspecialchars($created_at_time) ?>
                 </div>
+
+                <?= $trigger_btn_html ?>
             </div>
         </div>
         <?php 
-                break;
+        break;
 
                 // --- KASUS: PESAN DOKUMEN ---
                 case 'document':
-            ?>
+?>
         <div class="flex <?= $align_class ?>" id="message-<?= $msg_id ?>">
-            <div class="<?= $bubble_class ?> p-3 rounded-lg max-w-[70%]">
+            <div class="group relative <?= $bubble_class ?> p-3 rounded-lg max-w-[70%] break-words">
                 <?= $sender_name_html ?>
+                <?= $reply_box_html ?>
                 <a href="<?= $file_url ?>" download="<?= htmlspecialchars($original_filename) ?>"
                     class="flex items-center bg-white/20 p-2 rounded-lg hover:bg-white/40 transition-colors">
                     <img src="/Sinergi/public/assets/icons/document.svg" alt="Doc"
@@ -265,28 +356,32 @@ if (!function_exists('formatTanggalChat')) {
                 <div class="text-xs <?= $time_class ?> mt-1 text-right">
                     <?= htmlspecialchars($created_at_time) ?>
                 </div>
+
+                <?= $trigger_btn_html ?>
             </div>
         </div>
         <?php 
-                break;
+        break;
 
                 // --- KASUS: PESAN TEKS (DEFAULT) ---
                 case 'text':
                 default:
             ?>
         <div class="flex <?= $align_class ?>" id="message-<?= $msg_id ?>">
-            <div class="<?= $bubble_class ?> p-3 rounded-lg max-w-[70%]">
+            <div class="group relative <?= $bubble_class ?> p-3 rounded-lg max-w-[70%] break-words">
                 <?= $sender_name_html ?>
+                <?= $reply_box_html ?>
                 <?= htmlspecialchars($isi_pesan_string) ?>
                 <div class="text-xs <?= $time_class ?> mt-1 text-right">
                     <?= htmlspecialchars($created_at_time) ?>
                 </div>
+
+                <?= $trigger_btn_html ?>
             </div>
         </div>
         <?php 
                 break;
             endswitch; 
-            // --- AKHIR LOGIKA RENDER BARU ---
             ?>
 
         <?php endforeach; ?>
@@ -298,45 +393,33 @@ if (!function_exists('formatTanggalChat')) {
 
     <div class="p-4 border-t border-gray-200 bg-white">
 
+        <div id="reply-preview-area" class="hidden mb-2">
+        </div>
         <div id="file-preview-area" class="mb-2"></div>
 
         <div class="relative">
 
-            <div id="attach-menu"
-                class="hidden absolute bottom-full mb-5 left-24  w-[250px] bg-white text-gray-800 rounded-lg p-3 shadow-xl z-50">
-
-                <div class="attach-menu-item flex items-center px-3 py-3 rounded-md cursor-pointer hover:bg-gray-100"
-                    id="attach-image">
-                    <img src="/Sinergi/public/assets/icons/image.svg" alt="Photos & videos" class="w-6 h-6 mr-3">
-                    <span>Photos & videos</span>
-                </div>
-
-                <div class="attach-menu-item flex items-center px-3 py-3 rounded-md cursor-pointer hover:bg-gray-100"
-                    id="attach-document">
-                    <img src="/Sinergi/public/assets/icons/document.svg" alt="Document" class="w-6 h-6 mr-3">
-                    <span>Document</span>
-                </div>
-            </div>
-
-            <form id="chat-form" method="POST" class="flex items-center" enctype="multipart/form-data">
+            <form id="chat-form" method="POST" class="flex items-end" enctype="multipart/form-data">
 
                 <input type="hidden" name="forum_id" value="<?= $current_forum_id ?>">
 
-                <input type="file" id="image-upload-input" name="file_upload" accept="image/png, image/jpeg, image/gif"
+                <input type="file" id="file-upload-input" name="file_upload"
+                    accept="image/png, image/jpeg, image/gif, .pdf, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .txt"
                     class="hidden">
-                <input type="file" id="document-upload-input" name="file_upload"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" class="hidden">
 
-                <button type="button" id="attach-btn" class="p-2 rounded-full hover:bg-gray-200 mr-2 cursor-pointer">
-                    <img src="/Sinergi/public/assets/icons/attach.svg" alt="Attach" class="w-7 h-7">
+                <button type="button" id="attach-btn"
+                    class="p-2 rounded-full hover:bg-gray-200 mr-2 mb-1 cursor-pointer">
+                    <img src="/Sinergi/public/assets/icons/attach.svg" class="w-7 h-7">
                 </button>
 
-                <input type="text" id="message-input" name="isi_pesan" placeholder="Ketik pesan..."
-                    class="flex-grow py-2 px-4 border rounded-full bg-gray-100 mr-2" autocomplete="off">
+                <textarea id="message-input" name="isi_pesan" placeholder="Ketik pesan..."
+                    class="flex-grow py-2.5 px-4 border rounded-2xl bg-gray-100 mr-2 mb-1 resize-none overflow-y-hidden max-h-32 "
+                    rows="1" autocomplete="off"></textarea>
 
-                <button type="submit" class="p-2 ml-2 cursor-pointer rounded-full hover:bg-gray-200">
-                    <img src="/Sinergi/public/assets/icons/send.svg" alt="Notifikasi" class="w-8 h-8">
+                <button type="submit" id="send-btn" class="p-2 ml-2 cursor-pointer rounded-full hover:bg-gray-200 mb-1">
+                    <img src="/Sinergi/public/assets/icons/send.svg" alt="Kirim" class="w-8 h-8">
                 </button>
+
             </form>
         </div>
     </div>
@@ -346,338 +429,43 @@ if (!function_exists('formatTanggalChat')) {
         Pilih forum dari daftar di samping untuk memulai percakapan.
     </div>
     <?php endif; ?>
+
+
+    <div id="delete-confirm-modal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-lg max-w-sm w-full p-6 mx-auto">
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Hapus Pesan</h3>
+            <p class="text-sm text-gray-600 mb-6">
+                Anda yakin ingin menghapus pesan ini secara permanen? Tindakan ini tidak dapat diurungkan.
+            </p>
+            <div class="flex justify-end space-x-3">
+                <button type="button" id="modal-btn-cancel"
+                    class="py-2 px-4 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer">
+                    Batal
+                </button>
+                <button type="button" id="modal-btn-confirm-delete"
+                    class="py-2 px-4 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors cursor-pointer">
+                    Ya, Hapus
+                </button>
+            </div>
+        </div>
+    </div>
 </aside>
 
 
 <script>
-<?php if ($current_forum_id): // Hanya jalankan JS jika ada di dalam forum ?>
+<?php if ($current_forum_id): // Hanya definisikan jika ada di dalam forum ?>
 
-// --- (SEMUA KODE JS DARI LANGKAH 3 ADA DI SINI) ---
+// LANGKAH 1: Definisikan variabel global DARI PHP
+// Ini HARUS ada SEBELUM memanggil file chat_app.js
 const CURRENT_USER_ID = <?= (int)($_SESSION['user_id'] ?? 0) ?>;
 const FORUM_ID = <?= (int)$current_forum_id ?>;
-const chatBox = document.getElementById('chat-box');
-const chatForm = document.getElementById('chat-form');
-const messageInput = document.getElementById('message-input');
-
-// --- BARU: Ambil elemen-elemen untuk upload file ---
-const attachBtn = document.getElementById('attach-btn');
-const attachMenu = document.getElementById('attach-menu');
-const attachImageBtn = document.getElementById('attach-image');
-const attachDocBtn = document.getElementById('attach-document');
-const imageInput = document.getElementById('image-upload-input');
-const docInput = document.getElementById('document-upload-input');
-const filePreviewArea = document.getElementById('file-preview-area');
-
-// --- BARU: Variabel untuk menyimpan file yang akan di-upload ---
-let stagedFile = null;
-
-// --- Helper Function (Pindahan, agar bisa dipakai di mana-mana) ---
-function escapeHTML(str) {
-    if (typeof str !== 'string') return '';
-    return str.replace(/[&<>"']/g, function(m) {
-        return {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        } [m];
-    });
-}
-
-// --- Helper Function (LAMA) ---
-function formatTanggalChatJS(tanggalISO) {
-    if (!tanggalISO) return null;
-    try {
-        const today = new Date();
-        const msgDate = new Date(tanggalISO);
-        today.setHours(0, 0, 0, 0);
-        msgDate.setHours(0, 0, 0, 0);
-        const diffTime = today.getTime() - msgDate.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        if (diffDays === 0) return 'Hari ini';
-        if (diffDays === 1) return 'Kemarin';
-        if (diffDays < 7) {
-            const hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-            return hari[msgDate.getDay()];
-        }
-        const d = String(msgDate.getDate()).padStart(2, '0');
-        const m = String(msgDate.getMonth() + 1).padStart(2, '0');
-        const y = msgDate.getFullYear();
-        return `${d}/${m}/${y}`;
-    } catch (e) {
-        return null;
-    }
-}
-let lastPrintedDate = '';
-
-// --- Fungsi scroll ke bawah (LAMA) ---
-function scrollToBottom() {
-    if (chatBox) {
-        chatBox.scrollTop = chatBox.scrollHeight;
-    }
-}
-
-// --- FUNGSI appendMessage (VERSI LENGKAP DAN SUDAH DIPERBAIKI) ---
-function appendMessage(message) {
-    if (!chatBox) return;
-    const existingMessage = document.getElementById(`message-${message.message_id}`);
-    if (existingMessage) return;
-    const placeholder = document.getElementById('no-message-placeholder');
-    if (placeholder) placeholder.remove();
-
-    // --- 1. Logika Divider Tanggal (KODE LENGKAP) ---
-    const tanggalISO = message.created_at_iso;
-    let dateDividerHTML = '';
-    if (tanggalISO) {
-        const tanggalFormat = formatTanggalChatJS(tanggalISO);
-        if (tanggalFormat && tanggalFormat !== lastPrintedDate) {
-            dateDividerHTML = `
-            <div class="text-center my-3 chat-date-divider" data-date-string="${escapeHTML(tanggalFormat)}">
-                <span class="bg-gray-200 text-gray-700 text-xs font-semibold px-3 py-1 rounded-full">
-                    ${escapeHTML(tanggalFormat)}
-                </span>
-            </div>
-            `;
-            lastPrintedDate = tanggalFormat;
-        }
-    }
-
-    // --- 2. Logika Render Pesan BARU (KODE LENGKAP) ---
-    let messageHTML = '';
-    const isMyMessage = (message.sender_id == CURRENT_USER_ID);
-
-    // Ambil semua data dari JSON
-    const msg_type = message.message_type || 'text';
-    const msg_id = message.message_id || 0;
-    const isi_pesan = escapeHTML(message.isi_pesan || '');
-    const timeString = escapeHTML(message.created_at_time || '');
-    const sender_nama = escapeHTML(message.sender_nama || 'User');
-
-    const file_path = escapeHTML(message.file_path || '');
-    const original_filename = escapeHTML(message.original_filename || '');
-    const file_url = `/Sinergi/public/uploads/forum_files/${file_path}`;
-
-    const bubble_class = isMyMessage ? 'bg-blue-500 text-white' : 'bg-gray-200';
-    const time_class = isMyMessage ? 'text-blue-100' : 'text-gray-500';
-    const align_class = isMyMessage ? 'justify-end' : 'justify-start';
-    const sender_name_html = !isMyMessage ? `<p class="text-xs font-semibold mb-1 text-blue-600">${sender_nama}</p>` :
-        '';
-    const caption_html = (isi_pesan.length > 0) ? `<p class="mt-2 text-sm">${isi_pesan}</p>` : '';
-
-    switch (msg_type) {
-        // --- KASUS: PESAN SISTEM (KODE LENGKAP) ---
-        case 'join':
-        case 'leave':
-            messageHTML = `
-            <div class="text-center text-sm text-gray-500 my-2" id="message-${msg_id}">
-                ${isi_pesan}
-                <span class="text-xs ml-1">${timeString}</span>
-            </div>
-            `;
-            break;
-
-            // --- KASUS: PESAN GAMBAR (KODE LENGKAP + PERBAIKAN UKURAN) ---
-        case 'image':
-            messageHTML = `
-            <div class="flex ${align_class}" id="message-${msg_id}">
-                <div class="${bubble_class} p-2 rounded-lg max-w-[70%]">
-                    ${sender_name_html}
-                    <a href="${file_url}" target="_blank" class="cursor-pointer">
-                        <img src="${file_url}" alt="${original_filename}" class="rounded-md w-64 h-64 object-cover">
-                    </a>
-                    ${caption_html}
-                    <div class="text-xs ${time_class} mt-1 text-right">
-                        ${timeString}
-                    </div>
-                </div>
-            </div>
-            `;
-            break;
-
-            // --- KASUS: PESAN DOKUMEN (KODE LENGKAP) ---
-        case 'document':
-            messageHTML = `
-            <div class="flex ${align_class}" id="message-${msg_id}">
-                <div class="${bubble_class} p-3 rounded-lg max-w-[70%]">
-                    ${sender_name_html}
-                    <a href="${file_url}" download="${original_filename}" class="flex items-center bg-white/20 p-2 rounded-lg hover:bg-white/40 transition-colors">
-                        <img src="/Sinergi/public/assets/icons/document.svg" alt="Doc" class="w-8 h-8 mr-2 ${isMyMessage ? 'invert' : ''}">
-                        <div class="flex-1 overflow-hidden">
-                            <p class="font-medium truncate">${original_filename}</p>
-                            <span class="text-xs">Dokumen</span>
-                        </div>
-                    </a>
-                    ${caption_html}
-                    <div class="text-xs ${time_class} mt-1 text-right">
-                        ${timeString}
-                    </div>
-                </div>
-            </div>
-            `;
-            break;
-
-            // --- KASUS: PESAN TEKS (KODE LENGKAP) ---
-        case 'text':
-        default:
-            messageHTML = `
-            <div class="flex ${align_class}" id="message-${msg_id}">
-                <div class="${bubble_class} p-3 rounded-lg max-w-[70%]">
-                    ${sender_name_html}
-                    ${isi_pesan}
-                    <div class="text-xs ${time_class} mt-1 text-right">
-                        ${timeString}
-                    </div>
-                </div>
-            </div>
-            `;
-            break;
-    }
-
-    chatBox.innerHTML += dateDividerHTML;
-    chatBox.innerHTML += messageHTML;
-}
-
-// --- (SISA KODE LENGKAP DARI LANGKAH 3/6) ---
-async function startPolling(lastMessageId) {
-    if (!chatBox) return;
-    try {
-        const response = await fetch(
-            `index.php?page=check-new-messages&forum_id=${FORUM_ID}&last_message_id=${lastMessageId}`);
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-        }
-        const newMessages = await response.json();
-        let newLastId = lastMessageId;
-        if (newMessages.length > 0) {
-            newMessages.forEach(msg => {
-                appendMessage(msg);
-                newLastId = msg.message_id;
-            });
-            chatBox.dataset.lastMessageId = newLastId;
-            scrollToBottom();
-        }
-        startPolling(newLastId);
-    } catch (error) {
-        console.error('Long polling error:', error);
-        setTimeout(() => startPolling(lastMessageId), 5000);
-    }
-}
-if (attachBtn && attachMenu) {
-    attachBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        attachMenu.classList.toggle('hidden');
-    });
-    document.addEventListener('click', (e) => {
-        if (!attachMenu.contains(e.target) && !attachBtn.contains(e.target)) {
-            attachMenu.classList.add('hidden');
-        }
-    });
-}
-if (attachImageBtn && imageInput) {
-    attachImageBtn.addEventListener('click', () => {
-        imageInput.click();
-        attachMenu.classList.add('hidden');
-    });
-}
-if (attachDocBtn && docInput) {
-    attachDocBtn.addEventListener('click', () => {
-        docInput.click();
-        attachMenu.classList.add('hidden');
-    });
-}
-
-function showFilePreview(file) {
-    if (!file) {
-        filePreviewArea.innerHTML = '';
-        filePreviewArea.classList.add('hidden');
-        messageInput.placeholder = 'Ketik pesan...';
-        return;
-    }
-    filePreviewArea.classList.remove('hidden');
-    const isImage = file.type.startsWith('image/');
-    const iconSrc = isImage ? URL.createObjectURL(file) : '/Sinergi/public/assets/icons/document.svg';
-    const fileType = isImage ? 'Gambar' : 'Dokumen';
-    filePreviewArea.innerHTML = `
-        <div class="relative flex items-center p-2 bg-gray-100 rounded-lg border border-gray-300">
-            <img src="${iconSrc}" alt="Preview" class="${isImage ? 'w-12 h-12 rounded object-cover' : 'w-10 h-10'} mr-3">
-            <div class="flex-1 overflow-hidden">
-                <p class="text-sm font-medium text-gray-900 truncate">${escapeHTML(file.name)}</p>
-                <p class="text-xs text-gray-500">${fileType} - ${(file.size / 1024).toFixed(1)} KB</p>
-            </div>
-            <button type="button" id="cancel-file-btn" class="absolute top-1 right-1 p-1 rounded-full hover:bg-gray-300">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
-        </div>
-    `;
-    messageInput.placeholder = 'Tambahkan caption... (opsional)';
-    document.getElementById('cancel-file-btn').addEventListener('click', () => {
-        stagedFile = null;
-        imageInput.value = null;
-        docInput.value = null;
-        showFilePreview(null);
-    });
-}
-imageInput.addEventListener('change', handleFileSelect);
-docInput.addEventListener('change', handleFileSelect);
-
-function handleFileSelect(event) {
-    if (event.target.files && event.target.files.length > 0) {
-        stagedFile = event.target.files[0];
-        showFilePreview(stagedFile);
-    }
-}
-if (chatForm && messageInput) {
-    chatForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const isiPesan = messageInput.value;
-        if (isiPesan.trim() === '' && !stagedFile) return;
-        const formData = new FormData();
-        formData.append('forum_id', FORUM_ID);
-        formData.append('isi_pesan', isiPesan);
-        if (stagedFile) {
-            formData.append('file_upload', stagedFile, stagedFile.name);
-        }
-        messageInput.value = '';
-        showFilePreview(null);
-        stagedFile = null;
-        imageInput.value = null;
-        docInput.value = null;
-        try {
-            const response = await fetch('index.php?page=store-message', {
-                method: 'POST',
-                body: formData
-            });
-            if (!response.ok) {
-                messageInput.value = isiPesan;
-                const errorText = await response.text();
-                throw new Error(`Gagal mengirim pesan. Status: ${response.status}. Pesan: ${errorText}`);
-            }
-            const savedMessage = await response.json();
-            if (savedMessage && savedMessage.message_id) {
-                appendMessage(savedMessage);
-                chatBox.dataset.lastMessageId = savedMessage.message_id;
-                scrollToBottom();
-            } else {
-                throw new Error('Respon server tidak valid');
-            }
-        } catch (error) {
-            console.error('Gagal mengirim pesan:', error);
-            if (!stagedFile) messageInput.value = isiPesan;
-            alert(`Terjadi kesalahan: ${error.message}`);
-        }
-    });
-}
-if (chatBox) {
-    scrollToBottom();
-    let initialLastId = parseInt(chatBox.dataset.lastMessageId, 10);
-    const lastDivider = chatBox.querySelector('.chat-date-divider:last-of-type');
-    if (lastDivider) {
-        lastPrintedDate = lastDivider.dataset.dateString;
-    }
-    startPolling(initialLastId);
-}
+const CURRENT_USER_NAME = '<?= htmlspecialchars($_SESSION['nama_lengkap'] ?? '') ?>';
 
 <?php endif; ?>
 </script>
+
+<?php if ($current_forum_id): ?>
+
+<script src="/Sinergi/public/assets/js/chat_app.js"></script>
+
+<?php endif; ?>

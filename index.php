@@ -17,7 +17,11 @@ $public_pages = ['login', 'login-process', 'register', 'register-process', 'veri
 
 // --- PERBAIKAN: Daftar halaman API (JSON) ---
 // Halaman ini TIDAK BOLEH memuat HTML (header/footer)
-$api_pages = ['store-message', 'check-new-messages', 'store-forum', 'join-forum', 'captcha'];
+$api_pages = [
+    'store-message', 'check-new-messages', 'delete-message', 
+    'store-forum', 'join-forum', 'exit-forum', 'update-forum',
+    'captcha'
+];
 // ----------------------------------------
 
 if (!$is_logged_in && !in_array($page, $public_pages)) {
@@ -79,6 +83,10 @@ switch ($page) {
     case 'check-new-messages':
         require_once 'app/controllers/MessageController.php';
         checkNewMessages();
+        break;
+    case 'delete-message':
+        require_once 'app/controllers/MessageController.php';
+        deleteMessageController(); 
         break;
     case 'store-forum':
         require_once 'app/controllers/ForumController.php';

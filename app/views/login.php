@@ -10,9 +10,11 @@
 
 <body>
     <div class="flex h-screen">
+
         <div class="hidden md:block md:w-3/5">
             <img src="public/assets/images/Logo Siniger.jpg" alt="Login" class="h-full w-full object-cover">
         </div>
+
         <div class="w-full bg-white md:w-2/5 flex flex-col justify-center items-center p-8 md:p-12">
             <div class="w-full max-w-md">
                 <h2 class="text-3xl font-bold text-gray-900 mb-6">
@@ -21,7 +23,6 @@
 
                 <?php 
                 if (isset($pesan) && !empty($pesan)) : 
-                    // Tentukan warna berdasarkan konten pesan
                     $is_error = strpos(strtolower($pesan), 'gagal') !== false || strpos(strtolower($pesan), 'salah') !== false || strpos(strtolower($pesan), 'verifikasi') === false;
                     $bg_color = $is_error ? 'bg-red-100 border-red-400 text-red-700' : 'bg-green-100 border-green-400 text-green-700';
                 ?>
@@ -31,6 +32,7 @@
                 <?php 
                 endif; 
                 ?>
+
                 <form action="index.php?page=login-process" method="POST" class="space-y-4">
 
                     <div>
@@ -51,13 +53,14 @@
                             </span>
                         </div>
                     </div>
+
                     <div class="text-right text-sm">
                         <a href="#" class="font-semibold text-blue-600 hover:underline">
                             Lupa password?
                         </a>
                     </div>
 
-                    <div class="flex items-center space-x-4">
+                    <div class="flex items-end space-x-2">
                         <div class="w-2/3">
                             <label for="captcha_code" class="block text-sm font-medium text-gray-700 mb-1">Masukkan Kode
                                 Captcha</label>
@@ -66,25 +69,25 @@
                                 placeholder="Masukkan Kode">
                         </div>
 
-                        <div class="w-1/3 mt-4 flex items-center space-x-2">
-
+                        <div class="w-2/3 flex items-center space-x-2">
                             <img src="index.php?page=captcha" alt="Captcha"
                                 class="rounded-lg h-[50px] flex-1 object-cover border border-gray-300"
-                                id="captcha_image"> <button type="button" onclick="refreshCaptcha()"
-                                class="p-3 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                title="Refresh Captcha">
-                                <img src="/Sinergi/public/assets/icons/refresh.svg" alt="refresh" class="w-5 h-5">
-                            </button>
+                                id="captcha_image">
 
+                            <button type="button" onclick="refreshCaptcha()"
+                                class="p-5 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 cursor-pointer"
+                                title="Refresh Captcha">
+                                <img src="public/assets/icons/refresh.svg" alt="refresh" class="w-5 h-5">
+                            </button>
                         </div>
                     </div>
-
 
                     <button type="submit" name="login"
                         class="w-full bg-gray-900 text-white font-bold rounded-lg py-3 mt-4 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-opacity-50">
                         Sign In
                     </button>
                 </form>
+
                 <p class="text-center text-sm text-gray-600 mt-6">
                     Belum punya akun?
                     <a href="index.php?page=register" class="font-semibold text-blue-600 hover:underline">
@@ -94,16 +97,17 @@
             </div>
         </div>
     </div>
+
     <script>
     function togglePasswordVisibility() {
         const passwordField = document.getElementById('password');
         const toggleIcon = document.getElementById('togglePasswordIcon');
         if (passwordField.type === 'password') {
             passwordField.type = 'text';
-            toggleIcon.src = 'public/assets/icons/eyeOpen.svg';
+            toggleIcon.src = 'public/assets/icons/eyeOpen.svg'; // Path relatif
         } else {
             passwordField.type = 'password';
-            toggleIcon.src = 'public/assets/icons/eyeClosed.svg';
+            toggleIcon.src = 'public/assets/icons/eyeClosed.svg'; // Path relatif
         }
     }
 

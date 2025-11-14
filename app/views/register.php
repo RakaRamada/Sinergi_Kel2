@@ -10,7 +10,7 @@ $pesan = $_GET['pesan'] ?? '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Form Pendaftaran - Sinergi</title>
-    <link href="public/css/output.css" rel="stylesheet">
+    <link href="/sinergi/public/css/output.css" rel="stylesheet">
 </head>
 
 <body>
