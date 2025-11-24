@@ -10,7 +10,6 @@ if (!defined('DB_HOST')) {
     define('DB_CHARSET', 'AL32UTF8'); 
 }
 // Bagian 'define' selesai di sini
-
 // Kode di bawah ini akan selalu berjalan setiap kali file dipanggil,
 // untuk membuat koneksi $conn yang baru.
 $connection_string = DB_HOST . ':' . DB_PORT . '/' . DB_SERVICE_NAME;

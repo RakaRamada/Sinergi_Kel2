@@ -1,5 +1,5 @@
 <?php
-// File: app/controllers/AuthController.php
+// File: app/controllers/AuthController.php (VERSI PERBAIKAN FINAL)
 
 // Panggil semua yang dibutuhkan
 require_once __DIR__ . '/../models/UserModel.php'; 
@@ -38,13 +38,13 @@ function showLogin() {
 function doLogin() {
 
     if (!isset($_POST['captcha_code']) || empty($_POST['captcha_code'])) {
-        $pesan = "CAPTCHA tidak boleh kosong!";
-        require __DIR__ . '/../views/login.php'; // Tampilkan login lagi dgn pesan error
+        $_SESSION['error_message'] = "CAPTCHA tidak boleh kosong!";
+        header("Location: index.php?page=login");
         exit(); 
     
     } else if (!isset($_SESSION["code"]) || $_SESSION["code"] != $_POST['captcha_code']) {
-        $pesan = "Kode CAPTCHA Anda salah!";
-        require __DIR__ . '/../views/login.php'; // Tampilkan login lagi dgn pesan error
+        $_SESSION['error_message'] = "Kode CAPTCHA Anda salah!";
+        header("Location: index.php?page=login");
         exit();
     }
     
@@ -59,27 +59,25 @@ function doLogin() {
     }
 
     // 2. Panggil Model untuk mencari user berdasarkan EMAIL
-    // Pastikan fungsi getUserByEmail() sudah ada di UserModel.php
     $user_data = getUserByEmail($email); 
     
     if ($user_data) {
         // 3. Verifikasi password
-        if (password_verify($password_input, $user_data['password_hash'])) { // Ganti ke nama kolom password_hash
+        // === PERBAIKAN NAMA KOLOM DI SINI ===
+        if (password_verify($password_input, $user_data['password'])) { // Ganti dari 'password_hash'
             
             // 4. Cek status verifikasi
-            if ((int)($user_data['is_verified'] ?? 0) === 1) { // Kolom 'is_verified'
+            // === PERBAIKAN NAMA KOLOM DI SINI ===
+            if ((int)($user_data['is_verif'] ?? 0) === 1) { // Ganti dari 'is_verified'
                 // Login Berhasil
                 // 5. Sukses! Simpan info user ke session
-            $_SESSION['user_id'] = $user_data['user_id'];
-            $_SESSION['nama_lengkap'] = $user_data['nama_lengkap']; // (Ganti nama 'nama')
-            $_SESSION['role_name'] = $user_data['role_name']; 
-            
-            // --- TAMBAHAN YANG HILANG ---
-            $_SESSION['username'] = $user_data['username']; // WAJIB ADA
-            // ---------------------------
-            
-            // 6. Arahkan ke halaman utama aplikasi
-            header("Location: index.php?page=dashboard");
+                $_SESSION['user_id'] = $user_data['user_id'];
+                $_SESSION['nama_lengkap'] = $user_data['nama_lengkap'];
+                $_SESSION['role_name'] = $user_data['role_name']; 
+                $_SESSION['username'] = $user_data['username'];
+                
+                // 6. Arahkan ke halaman utama aplikasi
+                header("Location: index.php?page=dashboard");
                 exit; 
             } else {
                 $_SESSION['error_message'] = "Verifikasi akun anda terlebih dahulu! Cek email Anda.";
@@ -91,7 +89,7 @@ function doLogin() {
         $_SESSION['error_message'] = "Email atau Password salah!";
     }
 
-    // Jika sampai sini, login gagal. Arahkan kembali ke halaman login
+    // Jika sampai sini, login gagal.
     header("Location: index.php?page=login");
     exit();
 }
@@ -117,10 +115,7 @@ function logout() {
  * Menampilkan halaman Registrasi.
  */
 function showRegister() {
-    // Ambil pesan dari URL (jika ada)
     $pesan = $_GET['pesan'] ?? '';
-    
-    // Path view disesuaikan: app/views/register.php
     require_once 'app/views/register.php';
 }
 
@@ -128,29 +123,41 @@ function showRegister() {
  * Memproses registrasi pengguna baru.
  */
 function doRegister() {
-    $username = trim($_POST['username'] ?? ''); // tambahkan field username di form
+    $username = trim($_POST['username'] ?? '');
     $nama_lengkap = trim($_POST['nama_lengkap'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $password_input = $_POST['password'] ?? '';
     $role = $_POST['role'] ?? '3';
     
+    // Validasi dasar
+    if (empty($username) || empty($nama_lengkap) || empty($email) || empty($password_input)) {
+        $pesan = "Semua field wajib diisi!";
+        header("Location: index.php?page=register&pesan=" . urlencode($pesan));
+        exit();
+    }
+    
     $password_hash = password_hash($password_input, PASSWORD_DEFAULT);
     $token = bin2hex(random_bytes(16));
     
-    // panggilan createUser() diperbaiki:
-    // HAPUS $expires dari panggilan ini
     $result = createUser($username, $nama_lengkap, $email, $password_hash, $role, $token);
 
-
-    // 4️⃣ Tangani hasil dari model
+    // 4️⃣ Tangani hasil dari model (LEBIH SPESIFIK)
     if ($result === 'email_exists') {
-        $pesan = "Email sudah terdaftar. Silakan login.";
+        $pesan = "Email ini sudah terdaftar. Silakan gunakan email lain atau login.";
         header("Location: index.php?page=register&pesan=" . urlencode($pesan));
         exit();
+
+    } elseif ($result === 'username_exists') {
+        $pesan = "Username ini sudah digunakan. Silakan pilih username unik lain.";
+        header("Location: index.php?page=register&pesan=" . urlencode($pesan));
+        exit();
+
     } elseif ($result === 'db_error') {
+        // Ini adalah error yang Anda lihat di screenshot
         $pesan = "Gagal menyimpan data ke database. Coba lagi nanti.";
         header("Location: index.php?page=register&pesan=" . urlencode($pesan));
         exit();
+
     } elseif ($result !== 'success') {
         $pesan = "Terjadi kesalahan tidak diketahui.";
         header("Location: index.php?page=register&pesan=" . urlencode($pesan));
@@ -175,7 +182,6 @@ function doRegister() {
         $mail->setFrom('sinergi.tik24@gmail.com', 'PBL SINERGI');
         $mail->addAddress($email, $nama_lengkap);
 
-        // Tombol gaya inline
         $buttonStyle = "display:inline-block;padding:12px 24px;font-family:Arial,sans-serif;
                         font-size:16px;font-weight:600;color:#fff;background-color:#3b82f6;
                         border-radius:8px;text-decoration:none;";
@@ -208,3 +214,4 @@ function doRegister() {
         exit();
     }
 }
+?>

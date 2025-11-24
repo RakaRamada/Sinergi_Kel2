@@ -1,11 +1,15 @@
 <?php
-// TIDAK PERLU session_start(); 
-// karena index.php sudah menjalankannya.
+// PERBAIKAN: Tambahkan session_start() di paling atas.
+// Ini wajib karena file ini dipanggil langsung oleh <img> (request terpisah)
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 function acakCaptcha() {
     $alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     $pass = array(); 
-    $panjangAlpha = strlen($alphabet) - 2;
+    // PERBAIKAN: Max index adalah strlen() - 1, bukan - 2
+    $panjangAlpha = strlen($alphabet) - 1; 
     for ($i = 0; $i < 5; $i++) {
         $n = rand(0, $panjangAlpha);
         $pass[] = $alphabet[$n];
@@ -14,7 +18,7 @@ function acakCaptcha() {
 }
 
 $code = acakCaptcha();
-$_SESSION["code"] = $code; // Ini akan aman karena session sudah dimulai oleh index.php
+$_SESSION["code"] = $code; // Sekarang ini aman karena session sudah dimulai
 
 $wh = imagecreatetruecolor(173, 50);
 $bgc = imagecolorallocate($wh, 22, 86, 165); // Background biru

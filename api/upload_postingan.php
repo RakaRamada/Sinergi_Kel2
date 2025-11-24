@@ -1,89 +1,100 @@
 <?php
-// --- PERBAIKAN 1: Mulai Output Buffering ---
-ob_start();
+// File: api/upload_postingan.php
+// FIXED: Membolehkan posting gambar saja, teks saja, atau keduanya.
 
-require_once __DIR__ . '/../config/koneksi.php'; 
-session_start(); 
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+require_once __DIR__ . '/../config/koneksi.php';
 
 header('Content-Type: application/json');
-$response = [];
 
-// 1. Validasi: Hanya izinkan metode POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    $response = ['status' => 'error', 'message' => 'Metode request tidak valid.'];
-    ob_end_clean(); 
-    echo json_encode($response);
+// 1. Cek Login
+if (!isset($_SESSION['user_id'])) {
+    echo json_encode(['status' => 'error', 'message' => 'Anda belum login.']);
     exit;
 }
 
-// 2. Validasi: Pastikan pengguna sudah login
-if (!isset($_SESSION['id_users'])) {
-    $response = ['status' => 'error', 'message' => 'Anda harus login untuk memposting.'];
-    ob_end_clean(); 
-    echo json_encode($response);
+$user_id = $_SESSION['user_id'];
+$konten = isset($_POST['konten']) ? trim($_POST['konten']) : '';
+
+// 2. Cek Keberadaan File Gambar
+$has_image = false;
+if (isset($_FILES['post_image']) && $_FILES['post_image']['error'] === UPLOAD_ERR_OK) {
+    $has_image = true;
+}
+
+// 3. VALIDASI UTAMA (PERBAIKAN DISINI)
+// Error jika: Konten Kosong DAN Tidak ada Gambar
+if (empty($konten) && !$has_image) {
+    echo json_encode(['status' => 'error', 'message' => 'Postingan tidak boleh kosong (isi teks atau gambar).']);
     exit;
 }
 
-// 3. Ambil data dari form
-$id_user = $_SESSION['id_users'];
-$konten = $_POST['post_content'] ?? null;
-$image_path_db = null; 
+// 4. Proses Upload Gambar (Jika Ada)
+$post_image_db = null; // Default null jika tidak ada gambar
 
-// 4. Logika Handle Upload Gambar (Jika ada)
-if (isset($_FILES['post_image']) && $_FILES['post_image']['error'] == UPLOAD_ERR_OK) {
+if ($has_image) {
+    $upload_dir = __DIR__ . '/../public/assets/uploads/';
     
-    $upload_dir = __DIR__ . '/../public/uploads/posts/'; 
-    
-    if (!is_dir($upload_dir)) {
-        mkdir($upload_dir, 0755, true);
+    // Buat folder jika belum ada
+    if (!file_exists($upload_dir)) {
+        mkdir($upload_dir, 0777, true);
     }
 
-    $file_name = time() . '_' . basename($_FILES['post_image']['name']);
-    $target_file = $upload_dir . $file_name;
+    $file_name = $_FILES['post_image']['name'];
+    $file_tmp = $_FILES['post_image']['tmp_name'];
+    $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+    
+    // Validasi Ekstensi
+    $allowed_ext = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!in_array($file_ext, $allowed_ext)) {
+        echo json_encode(['status' => 'error', 'message' => 'Format gambar tidak didukung.']);
+        exit;
+    }
 
-    if (move_uploaded_file($_FILES['post_image']['tmp_name'], $target_file)) {
-        $image_path_db = '/Sinergi/public/uploads/posts/' . $file_name;
+    // Generate Nama Unik
+    $new_file_name = time() . '_' . uniqid() . '.' . $file_ext;
+    $destination = $upload_dir . $new_file_name;
+
+    if (move_uploaded_file($file_tmp, $destination)) {
+        // Path untuk disimpan di database (Relative URL)
+        $post_image_db = '/Sinergi/public/assets/uploads/' . $new_file_name;
     } else {
-        $response = ['status' => 'error', 'message' => 'Gagal mengunggah gambar.'];
-        ob_end_clean(); 
-        echo json_encode($response);
+        echo json_encode(['status' => 'error', 'message' => 'Gagal mengupload gambar ke folder server.']);
         exit;
     }
 }
 
-// 5. Validasi: Postingan tidak boleh kosong sama sekali
-if (empty($konten) && empty($image_path_db)) {
-    $response = ['status' => 'error', 'message' => 'Postingan tidak boleh kosong.'];
-    ob_end_clean(); 
-    echo json_encode($response);
-    exit;
+// 5. Simpan ke Database Oracle
+try {
+    // Query Insert
+    $sql = "INSERT INTO postingan (USER_ID, KONTEN, POST_IMAGE, CREATED_AT, LIKE_COUNT, COMMENT_COUNT) 
+            VALUES (:user_id, :konten, :post_image, SYSTIMESTAMP, 0, 0)";
+    
+    $stmt = oci_parse($conn, $sql);
+
+    // Binding Variabel
+    oci_bind_by_name($stmt, ':user_id', $user_id);
+    
+    // Handle Konten (Bisa Null/Empty)
+    oci_bind_by_name($stmt, ':konten', $konten);
+    
+    // Handle Image (Bisa Null)
+    oci_bind_by_name($stmt, ':post_image', $post_image_db);
+
+    if (oci_execute($stmt, OCI_COMMIT_ON_SUCCESS)) {
+        echo json_encode(['status' => 'success', 'message' => 'Berhasil memposting!']);
+    } else {
+        $e = oci_error($stmt);
+        echo json_encode(['status' => 'error', 'message' => 'Database Error: ' . $e['message']]);
+    }
+
+    oci_free_statement($stmt);
+    oci_close($conn);
+
+} catch (Exception $e) {
+    echo json_encode(['status' => 'error', 'message' => 'System Error: ' . $e->getMessage()]);
 }
-
-// 6. Simpan ke Database
-// --- PERBAIKAN 2: Hapus 'created_at' & 'SYSDATE' dari query ---
-// Biarkan database Oracle menggunakan 'DEFAULT SYSTIMESTAMP'
-$sql = "INSERT INTO postingan (id_user, konten, post_image) 
-        VALUES (:id_user_bv, :konten_bv, :image_bv)";
-
-$stmt = oci_parse($conn, $sql);
-
-oci_bind_by_name($stmt, ':id_user_bv', $id_user);
-oci_bind_by_name($stmt, ':konten_bv', $konten);
-oci_bind_by_name($stmt, ':image_bv', $image_path_db);
-
-$result = oci_execute($stmt);
-
-if ($result) {
-    $response = ['status' => 'success', 'message' => 'Postingan berhasil diunggah!'];
-} else {
-    $e = oci_error($stmt);
-    $response = ['status' => 'error', 'message' => 'Gagal menyimpan ke DB: ' . $e['message']];
-}
-
-// --- PERBAIKAN 1 (Lanjutan): Bersihkan buffer dan kirim JSON ---
-ob_end_clean();
-echo json_encode($response);
-
-oci_free_statement($stmt);
-oci_close($conn);
 ?>

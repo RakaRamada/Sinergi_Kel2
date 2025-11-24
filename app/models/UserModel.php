@@ -1,9 +1,8 @@
 <?php
-// File: app/models/UserModel.php (VERSI ROMBAKAN STABIL)
+// File: app/models/UserModel.php (VERSI PERBAIKAN FINAL)
 
 /**
  * Ambil data user berdasarkan email
- * (untuk proses login)
  */
 function getUserByEmail($email)
 {
@@ -13,6 +12,7 @@ function getUserByEmail($email)
         return null;
     }
 
+    // Perbaikan: Ubah 'u.is_verified' menjadi 'u.is_verif'
     $sql = "SELECT u.*, r.role_name 
             FROM users u
             JOIN roles r ON u.role_id = r.role_id
@@ -34,7 +34,6 @@ function getUserByEmail($email)
 
 /**
  * Ambil data user berdasarkan username
- * (untuk halaman profil)
  */
 function getUserByUsername($username)
 {
@@ -65,7 +64,6 @@ function getUserByUsername($username)
 
 /**
  * Ambil data user berdasarkan ID
- * (Dibutuhkan oleh ForumModel untuk pesan sistem join/leave)
  */
 function getUserById($user_id)
 {
@@ -99,7 +97,6 @@ function getUserById($user_id)
 
 /**
  * Tambahkan user baru ke database
- * (untuk proses registrasi)
  */
 function createUser($username, $nama_lengkap, $email, $password_hash, $role_id, $token) 
 {
@@ -109,23 +106,49 @@ function createUser($username, $nama_lengkap, $email, $password_hash, $role_id, 
         return 'db_error';
     }
 
-    $sql_check = "SELECT COUNT(*) AS CNT FROM users WHERE email = :email OR username = :uname";
-    $stmt_check = oci_parse($conn, $sql_check);
-    oci_bind_by_name($stmt_check, ':email', $email);
-    oci_bind_by_name($stmt_check, ':uname', $username);
-    oci_execute($stmt_check);
-    $row = oci_fetch_assoc($stmt_check);
-    $email_exists = ($row && $row['CNT'] > 0);
-    oci_free_statement($stmt_check);
+    // 1. Cek Email (Case-Insensitive)
+    $sql_check_email = "SELECT COUNT(*) AS CNT FROM users WHERE UPPER(email) = :email_upper";
+    $stmt_check_email = oci_parse($conn, $sql_check_email);
+    $email_upper = strtoupper($email);
+    oci_bind_by_name($stmt_check_email, ':email_upper', $email_upper);
+    
+    if (!oci_execute($stmt_check_email)) {
+         error_log('Error createUser check email: ' . oci_error($stmt_check_email)['message']);
+         @oci_close($conn);
+         return 'db_error';
+    }
+    $row_email = oci_fetch_assoc($stmt_check_email);
+    oci_free_statement($stmt_check_email);
 
-    if ($email_exists) {
+    if ($row_email && $row_email['CNT'] > 0) {
         @oci_close($conn);
-        return 'email_exists'; // (atau 'username_exists')
+        return 'email_exists';
     }
 
+    // 2. Cek Username (Case-Insensitive)
+    $sql_check_uname = "SELECT COUNT(*) AS CNT FROM users WHERE UPPER(username) = :uname_upper";
+    $stmt_check_uname = oci_parse($conn, $sql_check_uname);
+    $uname_upper = strtoupper($username);
+    oci_bind_by_name($stmt_check_uname, ':uname_upper', $uname_upper);
+
+    if (!oci_execute($stmt_check_uname)) {
+         error_log('Error createUser check username: ' . oci_error($stmt_check_uname)['message']);
+         @oci_close($conn);
+         return 'db_error';
+    }
+    $row_uname = oci_fetch_assoc($stmt_check_uname);
+    oci_free_statement($stmt_check_uname);
+    
+    if ($row_uname && $row_uname['CNT'] > 0) {
+        @oci_close($conn);
+        return 'username_exists';
+    }
+    
+    // 3. Jika lolos, baru lakukan INSERT
+    // === PERBAIKAN NAMA KOLOM DI SINI ===
     $sql = "INSERT INTO users (
-        username, nama_lengkap, email, password_hash, role_id,
-        verification_token, is_verified
+        username, nama_lengkap, email, password, role_id,
+        verifikasi_kode, is_verif
     ) VALUES (
         :username, :nama, :email, :pass, :role_id,
         :token, 0
@@ -137,9 +160,9 @@ function createUser($username, $nama_lengkap, $email, $password_hash, $role_id, 
     oci_bind_by_name($stmt, ":username", $username);
     oci_bind_by_name($stmt, ':nama', $nama_lengkap); 
     oci_bind_by_name($stmt, ':email', $email);
-    oci_bind_by_name($stmt, ':pass', $password_hash);
+    oci_bind_by_name($stmt, ':pass', $password_hash); // Variable $password_hash (dari controller) di-bind ke :pass
     oci_bind_by_name($stmt, ':role_id', $role_id_int, -1, SQLT_INT);
-    oci_bind_by_name($stmt, ':token', $token);
+    oci_bind_by_name($stmt, ':token', $token); // Variable $token (dari controller) di-bind ke :token
 
     if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) {
         error_log('Error createUser execute: ' . oci_error($stmt)['message']);
@@ -171,7 +194,8 @@ function verifyUserByToken($token)
         return 'db_error';
     }
  
-    $sql_find = "SELECT user_id FROM users WHERE verification_token = :token";
+    // === PERBAIKAN NAMA KOLOM DI SINI ===
+    $sql_find = "SELECT user_id FROM users WHERE verifikasi_kode = :token";
     
     $stmt_find = oci_parse($conn, $sql_find);
     oci_bind_by_name($stmt_find, ':token', $token);
@@ -191,7 +215,8 @@ function verifyUserByToken($token)
  
     $user_id = (int)$row['USER_ID']; 
     
-    $sql_update = "UPDATE users SET is_verified = 1, verification_token = NULL WHERE user_id = " . $user_id;
+    // === PERBAIKAN NAMA KOLOM DI SINI ===
+    $sql_update = "UPDATE users SET is_verif = 1, verifikasi_kode = NULL WHERE user_id = " . $user_id;
     
     $stmt_update = oci_parse($conn, $sql_update);
 
@@ -272,7 +297,7 @@ function searchUsers($searchTerm) {
 
     $users = [];
     while ($row = oci_fetch_assoc($stmt)) {
-        $users[] = array_change_key_case($row, CASE_LOWER);
+         $users[] = array_change_key_case($row, CASE_LOWER);
     }
 
     oci_free_statement($stmt);

@@ -2,20 +2,23 @@
 // ==========================
 // File: index.php (Merged)
 // ==========================
+require_once __DIR__ . '/config/koneksi.php';
+global $conn;
 
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 // --- ERROR HANDLER ---
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 // --- SESSION HANDLER ---
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+
 
 // --------------------------------------------------------------------------
 // AUTHENTICATION GUARD
 // --------------------------------------------------------------------------
-$is_logged_in = isset($_SESSION['user_id']) || isset($_SESSION['id_users']);
+$is_logged_in = isset($_SESSION['user_id']);
 $page = $_GET['page'] ?? ($is_logged_in ? 'dashboard' : 'login');
 
 // Halaman publik
@@ -54,9 +57,12 @@ switch ($page) {
         break;
 
     case 'login-process':
-    case 'process-login': // dari versi kamu
         require_once 'app/controllers/AuthController.php';
         doLogin();
+        break;
+        
+    case 'captcha':
+        require_once 'app/helpers/captcha.php';
         break;
 
     case 'register':
@@ -83,20 +89,21 @@ switch ($page) {
     // ------------------------
     // DASHBOARD & PROFILE
     // ------------------------
+    case 'home':
     case 'dashboard':
-        require_once 'app/controllers/HomeController.php';
-        dashboard_view();
+        require_once 'app/controllers/PostingController.php';        
+        showDashboard();
+        break;
+
+    case 'post-detail':
+    case 'post':
+        require_once 'app/controllers/PostingController.php';        
+        showPostDetail();
         break;
 
     case 'profile':
-        // gabungkan dua kemungkinan controller
-        if (file_exists('app/controllers/profileController.php')) {
-            require_once 'app/controllers/profileController.php';
-            showProfile();
-        } else {
-            require_once 'app/controllers/UserController.php';
-            show_profile();
-        }
+        require_once 'app/controllers/profileController.php';
+        showProfile();
         break;
 
     case 'edit_profile':
@@ -166,10 +173,6 @@ switch ($page) {
     // ------------------------
     // POSTING & SEARCH
     // ------------------------
-    case 'post-detail':
-        require_once 'app/controllers/PostingController.php';
-        showPostDetail();
-        break;
 
     case 'search':
         if (file_exists('app/controllers/SearchController.php')) {
@@ -192,22 +195,21 @@ switch ($page) {
     // ------------------------
     // DEFAULT
     // ------------------------
-    default:
-        if ($is_logged_in) {
-            require_once 'app/controllers/HomeController.php';
-            dashboard_view();
-        } else {
-            require_once 'app/controllers/AuthController.php';
-            showLogin();
-        }
-        break;
+    // default:
+    //     if ($is_logged_in) {
+    //         require_once 'app/controllers/PostingController.php';
+    //         showDashboard();
+    //     } else {
+    //         require_once 'app/controllers/AuthController.php';
+    //         showLogin();
+    //     }
+    //     break;
 }
 
 // --------------------------------------------------------------------------
 // FOOTER (tidak ditampilkan untuk halaman publik & API)
 // --------------------------------------------------------------------------
 if (!in_array($page, $public_pages) && !in_array($page, $api_pages)) {
-    require_once 'app/views/partials/footer.php';
+    require_once 'app/views/partials/postingan.php';
 }
-
 ?>
