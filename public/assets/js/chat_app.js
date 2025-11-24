@@ -187,9 +187,8 @@ function updateStickyDate() {
 
 /**
  * =======================================================
- * FUNGSI APPEND MESSAGE (VERSI "BODOH" - Sudah Benar)
+ * FUNGSI APPEND MESSAGE (VERSI UPDATE TEMA HITAM/PUTIH)
  * =======================================================
- * HANYA menambahkan HTML. TIDAK ADA inisialisasi JS.
  */
 function appendMessage(message) {
   if (!chatBox) return;
@@ -200,7 +199,7 @@ function appendMessage(message) {
   const placeholder = document.getElementById("no-message-placeholder");
   if (placeholder) placeholder.remove();
 
-  // 1. Logika Divider Tanggal (Visible / "Duplikat")
+  // 1. Logika Divider Tanggal
   const tanggalISO = message.created_at_iso;
   let dateDividerHTML = "";
   if (tanggalISO) {
@@ -231,36 +230,62 @@ function appendMessage(message) {
   const original_filename = escapeHTML(message.original_filename || "");
   const file_url = `/Sinergi/public/uploads/forum_files/${file_path}`;
 
-  // 3. Atur Style Dinamis
-  const bubble_class = isMyMessage
-    ? "bg-gray-800 text-gray-100"
-    : "bg-gray-200 text-gray-800";
-  const time_class = isMyMessage ? "text-gray-400" : "text-gray-500";
-  const align_class = isMyMessage ? "justify-end" : "justify-start";
-  const sender_name_html = !isMyMessage
-    ? `<p class="text-xs font-semibold mb-1 text-gray-800">${sender_nama}</p>`
-    : "";
-  const caption_html =
-    isi_pesan.length > 0 ? `<p class="mt-2 text-sm">${isi_pesan}</p>` : "";
+  // 3. Atur Style Dinamis (TEMA BARU: HITAM vs PUTIH)
+  let bubble_class,
+    time_class,
+    align_class,
+    sender_name_html,
+    reply_box_style,
+    reply_sender_style;
 
-  // 4. Logika Render Balasan
+  if (isMyMessage) {
+    // GAYA SAYA (Kanan, Hitam)
+    bubble_class = "bg-gray-900 text-white rounded-tr-none shadow-md";
+    time_class = "text-gray-400";
+    align_class = "justify-end";
+    sender_name_html = ""; // Nama sendiri tidak perlu ditampilkan
+
+    // Style Reply Saya
+    reply_box_style = "bg-gray-700 text-gray-200 border-l-4 border-gray-500";
+    reply_sender_style = "text-gray-300";
+  } else {
+    // GAYA ORANG LAIN (Kiri, Putih)
+    bubble_class =
+      "bg-white text-gray-900 rounded-tl-none border border-gray-200 shadow-sm";
+    time_class = "text-gray-400";
+    align_class = "justify-start";
+    sender_name_html = `<p class="text-xs font-bold mb-1 text-blue-600">${sender_nama}</p>`;
+
+    // Style Reply Orang Lain
+    reply_box_style = "bg-gray-100 text-gray-600 border-l-4 border-gray-400";
+    reply_sender_style = "text-gray-800";
+  }
+
+  // Caption HTML (dengan dukungan new line <br>)
+  const caption_html =
+    isi_pesan.length > 0
+      ? `<p class="mt-1 text-sm leading-relaxed">${isi_pesan.replace(
+          /\n/g,
+          "<br>"
+        )}</p>`
+      : "";
+
+  // 4. Logika Render Balasan (Updated Style)
   const reply_to_id = message.reply_to_message_id || null;
   const replied_text = escapeHTML(message.replied_message_text || "");
   const replied_sender = escapeHTML(message.replied_sender_nama || "");
   let reply_box_html = "";
+
   if (reply_to_id && replied_sender) {
     const replied_sender_display =
       replied_sender === CURRENT_USER_NAME ? "Anda" : replied_sender;
-    const reply_box_style = isMyMessage
-      ? "bg-black/20 text-gray-100"
-      : "bg-black/10 text-gray-700";
-    const reply_sender_style = isMyMessage ? "text-gray-100" : "text-gray-800";
+
     reply_box_html = `
-        <div class="mb-2 p-2 rounded-lg text-sm ${reply_box_style}">
-            <p class="font-semibold text-xs ${reply_sender_style}">Membalas ${replied_sender_display}</p>
-            <p class="truncate opacity-80">${replied_text}</p>
+        <div class="mb-2 p-2 rounded text-xs ${reply_box_style}">
+            <p class="font-bold mb-0.5 ${reply_sender_style}">Membalas ${replied_sender_display}</p>
+            <p class="truncate opacity-90">${replied_text}</p>
         </div>
-        `;
+    `;
   }
 
   // 5. HTML Dropdown Flowbite
@@ -310,7 +335,7 @@ function appendMessage(message) {
     </div>
     `;
 
-  // 6. Render HTML Pesan
+  // 6. Render HTML Pesan (Template String Updated)
   switch (msg_type) {
     case "join":
     case "leave":
@@ -342,7 +367,7 @@ function appendMessage(message) {
     case "document":
       messageHTML = `
             <div class="flex ${align_class}" id="message-${msg_id}">
-                <div class="group relative ${bubble_class} p-2 rounded-lg max-w-[70%] break-words">
+                <div class="group relative ${bubble_class} p-3 rounded-lg max-w-[70%] break-words">
                     ${sender_name_html}
                     ${reply_box_html}
                     <a href="${file_url}" download="${original_filename}" class="flex items-center bg-white/20 p-2 rounded-lg hover:bg-white/40 transition-colors">
@@ -366,10 +391,10 @@ function appendMessage(message) {
     default: // case 'text'
       messageHTML = `
             <div class="flex ${align_class}" id="message-${msg_id}">
-                <div class="group relative ${bubble_class} p-2 rounded-lg max-w-[70%] break-words">
+                <div class="group relative ${bubble_class} p-3 rounded-lg max-w-[70%] break-words">
                     ${sender_name_html}
                     ${reply_box_html}
-                    ${isi_pesan}
+                    ${caption_html} 
                     <div class="text-xs ${time_class} mt-1 text-right">
                         ${timeString}
                     </div>
@@ -382,8 +407,6 @@ function appendMessage(message) {
 
   chatBox.innerHTML += dateDividerHTML;
   chatBox.innerHTML += messageHTML;
-
-  // 7. TIDAK ADA KODE INIT DI SINI
 }
 
 /**

@@ -20,7 +20,8 @@ $public_pages = ['login', 'login-process', 'register', 'register-process', 'veri
 $api_pages = [
     'store-message', 'check-new-messages', 'delete-message', 
     'store-forum', 'join-forum', 'exit-forum', 'update-forum',
-    'captcha'
+    'captcha', 'get-sidebar-updates', 'accept-invite', 'reject-invite', 
+    'read-notif','api-search-candidates'
 ];
 // ----------------------------------------
 
@@ -108,6 +109,28 @@ switch ($page) {
         require_once 'app/controllers/ForumController.php';
         handleUpdateForum(); 
         break;
+    case 'get-sidebar-updates':
+        require_once 'app/controllers/MessageController.php';
+        getSidebarUpdates();
+        break;
+    case 'add-member':
+        require_once 'app/controllers/ForumController.php';
+        showAddMemberForm();
+        break;
+
+    case 'process-add-member':
+        require_once 'app/controllers/ForumController.php';
+        handleAddMemberProcess();
+        break;
+
+    case 'kick-member':
+        require_once 'app/controllers/ForumController.php';
+        handleKickMember();
+        break;
+    case 'api-search-candidates':
+        require_once 'app/controllers/ForumController.php';
+        searchCandidatesAPI();
+        break;
 
     // --- Kasus Halaman Konten (Dashboard, Pesan, dll.) ---
     case 'dashboard':
@@ -137,8 +160,25 @@ switch ($page) {
         require_once 'app/controllers/SearchController.php';
         showSearchPage();
         break;
+    // --- MODIFIKASI BAGIAN INI ---
     case 'notification':
-        require_once 'app/views/notification.php';
+        require_once 'app/controllers/NotificationController.php';
+        showNotifications(); // Panggil fungsi di Controller
+        break;
+
+    // Tambahan Rute untuk Aksi Tombol Invite
+    case 'accept-invite':
+        require_once 'app/controllers/NotificationController.php';
+        handleAcceptInvite(); // Nanti kita buat fungsi ini
+        break;
+
+    case 'reject-invite':
+        require_once 'app/controllers/NotificationController.php';
+        handleRejectInvite(); // Nanti kita buat fungsi ini
+        break;
+    case 'read-notif':
+        require_once 'app/controllers/NotificationController.php';
+        processReadNotification(); // Fungsi baru
         break;
         
     default:

@@ -17,7 +17,7 @@
 
         <div class="w-full bg-white md:w-2/5 flex flex-col justify-center items-center p-8 md:p-12">
             <div class="w-full max-w-md">
-                <h2 class="text-3xl font-bold text-gray-900 mb-6">
+                <h2 class="text-3xl font-bold text-gray-900 mb-6 ">
                     Yuk mulai diskusimu!
                 </h2>
 
@@ -75,9 +75,9 @@
                                 id="captcha_image">
 
                             <button type="button" onclick="refreshCaptcha()"
-                                class="p-5 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 cursor-pointer"
+                                class="p-2   rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 cursor-pointer"
                                 title="Refresh Captcha">
-                                <img src="public/assets/icons/refresh.svg" alt="refresh" class="w-5 h-5">
+                                <img src="public/assets/icons/refresh.svg" alt="refresh" class="w-6 h-6">
                             </button>
                         </div>
                     </div>

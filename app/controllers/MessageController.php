@@ -10,46 +10,45 @@ require_once __DIR__ . '/../models/ForumModel.php';
  */
 function showMessages() {
     // --- PERBAIKAN PRG (POST-REDIRECT-GET) ---
-    // Jika ada yang mencoba POST ke halaman ini...
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        //...tendang mereka kembali ke halaman ini via GET
         header('Location: ' . $_SERVER['REQUEST_URI']);
         exit();
     }
-    // 0. Mulai session (Sangat penting untuk mendapatkan $_SESSION['user_id'])
+    
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
     
-    // 1. Ambil ID forum dari URL (?forum_id=...)
     $forum_id = $_GET['forum_id'] ?? null; 
-
-    // 2. Siapkan variabel untuk data yang akan dikirim ke view
     $messages = [];
-    $forumInfo = null; // Info forum yang sedang dibuka (jika ada)
-    $forums = []; // Daftar semua forum (untuk sidebar)
+    $forumInfo = null;
+    $forums = []; 
 
-    // 3. --- INI PERUBAHAN UTAMA ---
-    // Pastikan user sudah login sebelum mencoba mengambil forum mereka
+    // Pastikan user sudah login
     if (isset($_SESSION['user_id'])) {
-        // Panggil fungsi baru: getForumsByUserId
-        // Bukan lagi getAllForums()
-        $forums = getForumsByUserId((int)$_SESSION['user_id']);
+        $user_id = (int)$_SESSION['user_id']; // <-- Ambil user_id
+        
+        // Panggil fungsi V2 yang baru (sudah ada notif/snippet)
+        $forums = getForumsByUserId($user_id);
+        
+    } else {
+        // Jika tidak login, $forums akan kosong
+        // Auth Guard di index.php akan menangani
     }
-    // Jika user tidak login, $forums akan tetap [] (array kosong)
-    // dan 'Auth Guard' di index.php akan mengarahkan mereka ke login.
-    // ----------------------------
 
-    // 4. Jika ada forum_id di URL, ambil pesan untuk forum tersebut
-    if ($forum_id) {
-        // Panggil fungsi dari MessageModel
+    // Jika ada forum_id di URL, ambil pesan untuk forum tersebut
+    if ($forum_id && isset($user_id)) { // <-- Pastikan user_id ada
+        
         $messages = getMessagesByForumId((int)$forum_id);
-
-        // Ambil info forum yang sedang dibuka
         $forumInfo = getForumById((int)$forum_id);
+
+        // --- INI DIA PERUBAHAN UTAMANYA ---
+        // Saat user membuka chat, kita update "terakhir dibaca"
+        // Ini akan otomatis menghapus notif di sidebar
+        updateLastReadMessage($user_id, (int)$forum_id);
+        // --- AKHIR PERUBAHAN ---
     }
     
-    // 5. Muat file view dan kirimkan data
     require 'app/views/messages.php'; 
 }
 
@@ -251,6 +250,31 @@ function deleteMessageController() {
         echo json_encode(['error' => 'Gagal menghapus pesan atau Anda tidak punya izin.']);
     }
     exit();
+}
+
+/**
+ * Endpoint API untuk sidebar poller.
+ * Hanya mengembalikan data JSON.
+ */
+function getSidebarUpdates() {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    $forums = [];
+    if (isset($_SESSION['user_id'])) {
+        // Panggil fungsi model kita yang sudah canggih
+        $forums = getForumsByUserId((int)$_SESSION['user_id']);
+    }
+
+    // Matikan error reporting agar tidak merusak JSON
+    error_reporting(0); 
+    ini_set('display_errors', 0);
+
+    // Kirim sebagai JSON
+    header('Content-Type: application/json');
+    echo json_encode($forums);
+    exit(); // Wajib ada exit()
 }
 
 ?>

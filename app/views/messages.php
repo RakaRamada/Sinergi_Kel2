@@ -4,44 +4,29 @@
 
 $current_forum_id = isset($_GET['forum_id']) ? (int)$_GET['forum_id'] : null;
 
-// --- TAMBAHKAN FUNGSI HELPER INI ---
+// --- FUNGSI HELPER TANGGAL ---
 if (!function_exists('formatTanggalChat')) {
     function formatTanggalChat($tanggal_iso) {
         if (!$tanggal_iso) return null;
         
         try {
-            // 1. Set zona waktu (ini penting untuk 'now')
             $tz = new DateTimeZone('Asia/Jakarta');
-            
-            // 2. Dapatkan tanggal HARI INI sebagai string 'Y-m-d'
             $today_str = (new DateTime('now', $tz))->format('Y-m-d');
-            
-            // 3. Dapatkan tanggal KEMARIN sebagai string 'Y-m-d'
             $yesterday_str = (new DateTime('yesterday', $tz))->format('Y-m-d');
+            $msg_date_str = substr($tanggal_iso, 0, 10); 
 
-            // 4. Ambil HANYA bagian tanggal (Y-m-d) dari string ISO
-            $msg_date_str = substr($tanggal_iso, 0, 10); // Hasil: '2025-11-14'
-
-            // 5. Bandingkan string-nya (JAUH LEBIH AMAN)
             if ($msg_date_str === $today_str) {
                 return 'Hari ini';
             } elseif ($msg_date_str === $yesterday_str) {
                 return 'Kemarin';
             }
             
-            // 6. Jika bukan keduanya, baru kita ubah formatnya
             $msgDateObj = new DateTime($tanggal_iso, $tz);
-            
-            // Hitung selisih hari (pakai strtotime yang lebih universal)
-            $today_time = strtotime($today_str); // Waktu 00:00 hari ini
-            $msg_time = strtotime($msg_date_str);   // Waktu 00:00 pesan
-            
-            // Perhitungan selisih hari manual
+            $today_time = strtotime($today_str);
+            $msg_time = strtotime($msg_date_str);
             $diff_seconds = $today_time - $msg_time;
             $diff_days_manual = $diff_seconds / (60 * 60 * 24); 
 
-            // --- INI ADALAH PERBAIKANNYA ---
-            // Cek apakah selisihnya antara 2 s/d 6 hari
             if ($diff_days_manual > 1 && $diff_days_manual < 7) { 
                 $hari = [
                     'Sunday' => 'Minggu', 'Monday' => 'Senin', 'Tuesday' => 'Selasa',
@@ -49,22 +34,14 @@ if (!function_exists('formatTanggalChat')) {
                 ];
                 return $hari[$msgDateObj->format('l')] ?? $msgDateObj->format('l');
             } else {
-                // Jika lebih dari seminggu (atau error), tampilkan tanggal
                 return $msgDateObj->format('d/m/Y');
             }
 
         } catch (Exception $e) {
-            error_log('Error formatTanggalChat (V-Final): ' . $e->getMessage());
-            // Fallback jika ada error, tampilkan tanggal saja
-            try {
-                return (new DateTime($tanggal_iso))->format('d/m/Y');
-            } catch (Exception $ex) {
-                return null; // Gagal total
-            }
+            return null;
         }
     }
 }
-// --- AKHIR FUNGSI HELPER ---
 ?>
 
 <main class="col-span-4 border-r border-gray-200 flex flex-col h-screen">
@@ -73,32 +50,78 @@ if (!function_exists('formatTanggalChat')) {
         <h2 class="text-xl font-bold mb-4">Forum Diskusi Anda</h2>
     </div>
 
-    <div class="flex-1 overflow-y-auto">
+    <div id="forum-list-container" class="flex-1 overflow-y-auto custom-scrollbar">
         <?php if (isset($forums) && is_array($forums) && !empty($forums)): ?>
         <?php foreach ($forums as $forum): ?>
         <?php
             $forum_id = $forum['forum_id'] ?? 0;
             $nama_forum = $forum['nama_forum'] ?? 'Forum Tanpa Nama';
             
-            // Logika Deskripsi (CLOB)
-            $deskripsi_raw = $forum['deskripsi'] ?? null;
-            $deskripsi_string = ($deskripsi_raw instanceof OCILob) ? $deskripsi_raw->read($deskripsi_raw->size()) : (is_string($deskripsi_raw) ? $deskripsi_raw : '');
-            $deskripsi = !empty($deskripsi_string) ? htmlspecialchars($deskripsi_string) : 'Klik untuk masuk ke forum';
-            
-            // Logika Gambar Forum (Kolom Kiri)
-            $image_path = '/Sinergi/public/assets/images/user.png'; // Gambar default
+            // Gambar Forum
+            $image_path = '/Sinergi/public/assets/images/user.png';
             if (!empty($forum['forum_image'])) {
                 $image_path = '/Sinergi/public/uploads/forum_profiles/' . htmlspecialchars($forum['forum_image']);
             }
-        ?>
-        <a href="index.php?page=messages&forum_id=<?= $forum_id ?>" class="flex items-start p-4 border-b border-gray-200 hover:bg-gray-50 
-                              <?php if ($current_forum_id === $forum_id) echo 'bg-gray-100 font-semibold'; ?>">
 
-            <img src="<?= $image_path ?>" alt="Profil Forum" class="w-10 h-10 rounded-full mr-3 object-cover">
+            // Snippet Pesan Terakhir
+            $snippet_html = '';
+            $last_msg_text = $forum['last_message_text'] ?? '';
+            $last_msg_type = $forum['last_message_type'] ?? '';
+            $last_msg_sender = $forum['last_message_sender'] ?? '';
+            $last_msg_sender_id = $forum['last_message_sender_id'] ?? 0;
+            $current_user_id = $_SESSION['user_id'] ?? 0;
+
+            if (empty($last_msg_sender)) {
+                $deskripsi_raw = $forum['deskripsi'] ?? null;
+                $deskripsi_string = ($deskripsi_raw instanceof OCILob) ? $deskripsi_raw->read($deskripsi_raw->size()) : (is_string($deskripsi_raw) ? $deskripsi_raw : 'Klik untuk masuk');
+                $snippet_html = '<p class="text-sm text-gray-600 truncate italic">' . htmlspecialchars($deskripsi_string) . '</p>';
+            } else {
+                $sender_display = ($last_msg_sender_id == $current_user_id) ? 'Anda' : htmlspecialchars($last_msg_sender);
+                
+                $message_content = '';
+                switch ($last_msg_type) {
+                    case 'image': $message_content = '[Gambar]'; break;
+                    case 'document': $message_content = '[Dokumen]'; break;
+                    case 'join':
+                    case 'leave':
+                        $message_content = htmlspecialchars($last_msg_text);
+                        $sender_display = '';
+                        break;
+                    default: $message_content = htmlspecialchars($last_msg_text); break;
+                }
+                
+                $prefix = $sender_display ? $sender_display . ': ' : '';
+                $snippet_html = '<p class="text-sm text-gray-600 truncate">' . $prefix . $message_content . '</p>';
+            }
+            
+            // --- UPDATE LOGIKA NOTIFIKASI (Hide badge jika sedang dibuka) ---
+            $unread_count = (int)($forum['unread_count'] ?? 0);
+            $notif_html = '';
+            if ($unread_count > 0 && $forum_id !== $current_forum_id) {
+                $notif_html = '<span id="notif-badge-' . $forum_id . '" class="ml-2 bg-gray-900 text-white text-xs font-bold px-2 py-0.5 rounded-full">' . $unread_count . '</span>';
+            }
+        ?>
+
+        <a href="index.php?page=messages&forum_id=<?= $forum_id ?>" class="flex items-start p-4 border-b border-gray-200 hover:bg-gray-50 
+                  <?php if ($current_forum_id === $forum_id) echo 'bg-gray-100 font-semibold'; ?>">
+
+            <img src="<?= $image_path ?>" alt="Profil Forum"
+                class="w-10 h-10 rounded-full mr-3 object-cover flex-shrink-0">
 
             <div class="flex-1 overflow-hidden">
-                <p class="font-bold"><?= htmlspecialchars($nama_forum) ?></p>
-                <p class="text-sm text-gray-600 truncate"><?= $deskripsi ?></p>
+                <div class="flex justify-between items-center">
+                    <p class="font-bold truncate"><?= htmlspecialchars($nama_forum) ?></p>
+                    <?php if (!empty($forum['last_message_time'])): ?>
+                    <span
+                        class="text-xs text-gray-500 flex-shrink-0 ml-2"><?= htmlspecialchars($forum['last_message_time']) ?></span>
+                    <?php endif; ?>
+                </div>
+                <div class="flex justify-between items-center mt-1">
+                    <div class="flex-1 overflow-hidden">
+                        <?= $snippet_html ?>
+                    </div>
+                    <?= $notif_html ?>
+                </div>
             </div>
         </a>
         <?php endforeach; ?>
@@ -126,12 +149,11 @@ if (!function_exists('formatTanggalChat')) {
     <?php if (isset($forumInfo) && is_array($forumInfo) && !empty($forumInfo)): ?>
 
     <a href="index.php?page=forum-details&forum_id=<?= $current_forum_id ?>"
-        class="block p-4 border-b border-gray-200 hover:bg-gray-100 transition-colors duration-150 cursor-pointer">
+        class="block p-4 border-b border-gray-200 hover:bg-gray-100 transition-colors duration-150 cursor-pointer bg-white z-20">
         <div class="flex justify-between items-center">
             <div class="flex items-center">
                 <?php
-                    // Logika Gambar Forum (Header Kanan)
-                    $header_image_path = '/Sinergi/public/assets/images/user.png'; // Default
+                    $header_image_path = '/Sinergi/public/assets/images/user.png'; 
                     if (!empty($forumInfo['forum_image'])) {
                         $header_image_path = '/Sinergi/public/uploads/forum_profiles/' . htmlspecialchars($forumInfo['forum_image']);
                     }
@@ -145,7 +167,8 @@ if (!function_exists('formatTanggalChat')) {
                         $deskripsi_forum_raw = $forumInfo['deskripsi'] ?? null;
                         $deskripsi_forum_string = ($deskripsi_forum_raw instanceof OCILob) ? $deskripsi_forum_raw->read($deskripsi_forum_raw->size()) : (is_string($deskripsi_forum_raw) ? $deskripsi_forum_raw : '');
                     ?>
-                    <p class="text-sm text-gray-500"><?= htmlspecialchars($deskripsi_forum_string) ?></p>
+                    <p class="text-sm text-gray-500 truncate max-w-md"><?= htmlspecialchars($deskripsi_forum_string) ?>
+                    </p>
                 </div>
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -156,54 +179,41 @@ if (!function_exists('formatTanggalChat')) {
     </a>
 
     <div id="sticky-date-header"
-        class="absolute top-20 left-0 right-3 z-10 text-center py-1 transition-all duration-200"
+        class="absolute top-20 left-0 right-3 z-10 text-center py-1 transition-all duration-200 pointer-events-none"
         style="opacity: 0; transform: translateY(-100%);">
         <span class="bg-gray-200 text-gray-700 text-xs font-semibold px-3 py-1 rounded-full shadow-md">
         </span>
     </div>
+
     <?php
-    // Ambil ID pesan terakhir (kode ini sudah ada)
     $last_message_id = 0;
     if (isset($messages) && !empty($messages)) {
         $last_message_id = end($messages)['message_id'] ?? 0;
     }
-    ?> <div id="chat-box" class="flex-grow p-6 overflow-y-auto space-y-4 bg-gray-50"
+    ?>
+
+    <div id="chat-box" class="flex-grow p-6 overflow-y-auto space-y-4 bg-gray-50 custom-scrollbar"
         data-last-message-id="<?= $last_message_id ?>">
 
         <?php if (isset($messages) && is_array($messages) && !empty($messages)): ?>
 
-        <?php
-        // --- AWAL BLOK BARU (LEBIH KUAT) ---
-        // Kita ubah loop-nya untuk mendapatkan $i (index)
-        ?>
         <?php foreach ($messages as $i => $message): ?>
 
         <?php
-            // 1. Ambil tanggal pesan ini
+            // Logika Divider Tanggal
             $tanggal_pesan_ini = formatTanggalChat($message['created_at_iso'] ?? null);
-            $tanggal_pesan_sebelumnya = null;
+            $tanggal_pesan_sebelumnya = ($i > 0) ? formatTanggalChat($messages[$i-1]['created_at_iso'] ?? null) : null;
 
-            // 2. Jika ini bukan pesan pertama ($i > 0), ambil tanggal pesan sebelumnya
-            if ($i > 0) {
-                // Kita akses $messages[$i-1] untuk pesan sebelumnya
-                $tanggal_pesan_sebelumnya = formatTanggalChat($messages[$i-1]['created_at_iso'] ?? null);
-            }
-
-            // 3. Tampilkan divider HANYA jika tanggalnya ada DAN tidak sama dengan tanggal sebelumnya
-            // INI ADALAH LOGIKA YANG BENAR: h-0 opacity-0
             if ($tanggal_pesan_ini && $tanggal_pesan_ini !== $tanggal_pesan_sebelumnya):
-    ?>
+        ?>
         <div class="text-center chat-date-divider my-2" data-date-string="<?= htmlspecialchars($tanggal_pesan_ini) ?>">
             <span class="bg-gray-200 text-gray-700 text-xs font-semibold px-3 py-1 rounded-full">
                 <?= htmlspecialchars($tanggal_pesan_ini) ?>
             </span>
         </div>
-        <?php
-    endif;
-    ?>
+        <?php endif; ?>
 
         <?php 
-            // --- GANTI TOTAL BLOK DEFINISI VARIABEL INI ---
             $msg_type = $message['message_type'] ?? 'text';
             $msg_id = $message['message_id'] ?? 0; 
             $sender_id = $message['sender_id'] ?? null;
@@ -213,45 +223,56 @@ if (!function_exists('formatTanggalChat')) {
             $current_user_id = $_SESSION['user_id'] ?? null;
             $is_my_message = ($sender_id == $current_user_id);
 
-            // Data file (aman)
             $file_path = $message['file_path'] ?? '';
-            $original_filename = $message['original_filename'] ?? ''; // <-- DIPERBAIKI
+            $original_filename = $message['original_filename'] ?? ''; 
             $file_url = '/Sinergi/public/uploads/forum_files/' . $file_path;
 
-            // Data Reply (aman)
             $reply_to_id = $message['reply_to_message_id'] ?? null;
-            $replied_text = $message['replied_message_text'] ?? ''; // <-- DIPERBAIKI
-            $replied_sender = $message['replied_sender_nama'] ?? ''; // <-- DIPERBAIKI
-            // --- AKHIR BLOK ---
+            $replied_text = $message['replied_message_text'] ?? ''; 
+            $replied_sender = $message['replied_sender_nama'] ?? ''; 
 
-            // Tentukan kelas CSS (Tidak berubah)
-            $bubble_class = $is_my_message ? 'bg-gray-800 text-gray-100' : 'bg-gray-200';
-            $time_class = $is_my_message ? 'text-gray-400' : 'text-gray-500';
-            $align_class = $is_my_message ? 'justify-end' : 'justify-start';
-            $sender_name_html = !$is_my_message ? '<p class="text-xs font-semibold mb-1 text-gray-800">' . htmlspecialchars($sender_nama) . '</p>' : '';
-            $caption_html = !empty($isi_pesan_string) ? '<p class="mt-2 text-sm">' . htmlspecialchars($isi_pesan_string) . '</p>' : '';
+            // --- UPDATE STYLE TEMA (HITAM vs PUTIH) ---
+            if ($is_my_message) {
+                // GAYA PENGIRIM (SAYA) - Hitam
+                $bubble_class = 'bg-gray-900 text-white rounded-tr-none shadow-md';
+                $time_class = 'text-gray-400';
+                $align_class = 'justify-end';
+                $sender_name_html = ''; // Nama saya disembunyikan
+                
+                // Style Reply Saya
+                $reply_box_style = 'bg-gray-700 text-gray-200 border-l-4 border-gray-500';
+                $reply_sender_style = 'text-gray-300';
+                
+            } else {
+                // GAYA PENERIMA (ORANG LAIN) - Putih
+                $bubble_class = 'bg-white text-gray-900 rounded-tl-none border border-gray-200 shadow-sm';
+                $time_class = 'text-gray-400';
+                $align_class = 'justify-start';
+                $sender_name_html = '<p class="text-xs font-bold mb-1 text-blue-600">' . htmlspecialchars($sender_nama) . '</p>';
+                
+                // Style Reply Orang Lain
+                $reply_box_style = 'bg-gray-100 text-gray-600 border-l-4 border-gray-400';
+                $reply_sender_style = 'text-gray-800';
+            }
 
-            // HTML Kotak Balasan (Tidak berubah)
+            $caption_html = !empty($isi_pesan_string) ? '<p class="mt-1 text-sm leading-relaxed">' . nl2br(htmlspecialchars($isi_pesan_string)) . '</p>' : '';
+
+            // HTML Kotak Balasan (Disesuaikan warnanya)
             $reply_box_html = '';
             if ($reply_to_id && $replied_sender) {
                 $replied_sender_display = ($replied_sender == $_SESSION['nama_lengkap']) ? 'Anda' : htmlspecialchars($replied_sender);
                 $reply_box_html = '
-                <div class="mb-2 p-2 rounded-md bg-black/10 text-sm opacity-80">
-                    <p class="font-semibold text-xs text-gray-100">Membalas ' . $replied_sender_display . '</p>
-                    <p class="truncate">' . htmlspecialchars($replied_text) . '</p>
+                <div class="mb-2 p-2 rounded text-xs ' . $reply_box_style . '">
+                    <p class="font-bold mb-0.5 ' . $reply_sender_style . '">Membalas ' . $replied_sender_display . '</p>
+                    <p class="truncate opacity-90">' . htmlspecialchars($replied_text) . '</p>
                 </div>
                 ';
             }
-
-         
-            // ... (kode $reply_box_html) ...
-
-            /// --- GANTI TOTAL BLOK INI ---
             
-            // Tentukan data apa yang akan dibalas
+            // Tentukan teks untuk reply data
             $reply_data_text = ($msg_type === 'text') ? $isi_pesan_string : $original_filename;
 
-            // Kita siapkan data untuk tombol Hapus
+            // Tombol Hapus (Hanya Pesan Saya)
             $delete_button_html = '';
             if ($is_my_message) {
                 $delete_button_html = '
@@ -267,7 +288,7 @@ if (!function_exists('formatTanggalChat')) {
                 </li>';
             }
 
-            // Ini adalah HTML trigger BARU
+            // Dropdown Menu Trigger
             $trigger_btn_html = '
             <button type="button" 
                     id="dropdown-btn-' . $msg_id . '" 
@@ -298,12 +319,10 @@ if (!function_exists('formatTanggalChat')) {
                     ' . $delete_button_html . ' </ul>
             </div>
             ';
-            // --- AKHIR BLOK BARU ---
-
 
             switch ($msg_type):
                 
-                // --- KASUS: PESAN SISTEM (JOIN/LEAVE) ---
+                // --- PESAN SISTEM ---
                 case 'join':
                 case 'leave':
             ?>
@@ -314,9 +333,9 @@ if (!function_exists('formatTanggalChat')) {
         <?php 
                 break;
 
-                // --- KASUS: PESAN GAMBAR ---
+                // --- PESAN GAMBAR ---
                 case 'image':
-?>
+        ?>
         <div class="flex <?= $align_class ?>" id="message-<?= $msg_id ?>">
             <div class="group relative <?= $bubble_class ?> p-2 rounded-lg max-w-[70%] break-words">
                 <?= $sender_name_html ?>
@@ -329,16 +348,15 @@ if (!function_exists('formatTanggalChat')) {
                 <div class="text-xs <?= $time_class ?> mt-1 text-right">
                     <?= htmlspecialchars($created_at_time) ?>
                 </div>
-
                 <?= $trigger_btn_html ?>
             </div>
         </div>
         <?php 
         break;
 
-                // --- KASUS: PESAN DOKUMEN ---
+                // --- PESAN DOKUMEN ---
                 case 'document':
-?>
+        ?>
         <div class="flex <?= $align_class ?>" id="message-<?= $msg_id ?>">
             <div class="group relative <?= $bubble_class ?> p-3 rounded-lg max-w-[70%] break-words">
                 <?= $sender_name_html ?>
@@ -356,14 +374,13 @@ if (!function_exists('formatTanggalChat')) {
                 <div class="text-xs <?= $time_class ?> mt-1 text-right">
                     <?= htmlspecialchars($created_at_time) ?>
                 </div>
-
                 <?= $trigger_btn_html ?>
             </div>
         </div>
         <?php 
         break;
 
-                // --- KASUS: PESAN TEKS (DEFAULT) ---
+                // --- PESAN TEKS ---
                 case 'text':
                 default:
             ?>
@@ -375,7 +392,6 @@ if (!function_exists('formatTanggalChat')) {
                 <div class="text-xs <?= $time_class ?> mt-1 text-right">
                     <?= htmlspecialchars($created_at_time) ?>
                 </div>
-
                 <?= $trigger_btn_html ?>
             </div>
         </div>
@@ -387,46 +403,46 @@ if (!function_exists('formatTanggalChat')) {
         <?php endforeach; ?>
 
         <?php else: ?>
-        <div id="no-message-placeholder" class="text-center text-gray-500">Belum ada pesan di forum ini.</div>
+        <div id="no-message-placeholder" class="text-center text-gray-500 h-full flex items-center justify-center">
+            <p>Belum ada pesan di forum ini. Jadilah yang pertama menyapa!</p>
+        </div>
         <?php endif; ?>
     </div>
 
     <div class="p-4 border-t border-gray-200 bg-white">
 
-        <div id="reply-preview-area" class="hidden mb-2">
-        </div>
-        <div id="file-preview-area" class="mb-2"></div>
+        <div id="reply-preview-area" class="hidden mb-2"></div>
+        <div id="file-preview-area" class="mb-2 hidden"></div>
 
         <div class="relative">
-
             <form id="chat-form" method="POST" class="flex items-end" enctype="multipart/form-data">
-
                 <input type="hidden" name="forum_id" value="<?= $current_forum_id ?>">
-
                 <input type="file" id="file-upload-input" name="file_upload"
                     accept="image/png, image/jpeg, image/gif, .pdf, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .txt"
                     class="hidden">
 
                 <button type="button" id="attach-btn"
-                    class="p-2 rounded-full hover:bg-gray-200 mr-2 mb-1 cursor-pointer">
+                    class="p-2 rounded-full hover:bg-gray-200 mr-2 mb-1 cursor-pointer transition">
                     <img src="/Sinergi/public/assets/icons/attach.svg" class="w-7 h-7">
                 </button>
 
                 <textarea id="message-input" name="isi_pesan" placeholder="Ketik pesan..."
-                    class="flex-grow py-2.5 px-4 border rounded-2xl bg-gray-100 mr-2 mb-1 resize-none overflow-y-hidden max-h-32 "
+                    class="flex-grow py-2.5 px-4 border border-gray-300 rounded-2xl bg-gray-50 mr-2 mb-1 resize-none overflow-y-hidden max-h-32 focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 transition"
                     rows="1" autocomplete="off"></textarea>
 
-                <button type="submit" id="send-btn" class="p-2 ml-2 cursor-pointer rounded-full hover:bg-gray-200 mb-1">
+                <button type="submit" id="send-btn"
+                    class="p-2 ml-2 cursor-pointer rounded-full hover:bg-gray-200 mb-1 transition">
                     <img src="/Sinergi/public/assets/icons/send.svg" alt="Kirim" class="w-8 h-8">
                 </button>
-
             </form>
         </div>
     </div>
 
     <?php else: ?>
-    <div class="flex-grow flex items-center justify-center text-gray-500">
-        Pilih forum dari daftar di samping untuk memulai percakapan.
+    <div class="flex-grow flex flex-col items-center justify-center text-gray-500 bg-gray-50">
+        <img src="/Sinergi/public/assets/images/user.png" class="w-24 h-24 opacity-20 mb-4 grayscale">
+        <p class="text-lg font-medium">Selamat Datang di Forum Diskusi Sinergi</p>
+        <p class="text-sm mt-2">Pilih forum dari daftar di samping untuk memulai percakapan.</p>
     </div>
     <?php endif; ?>
 
@@ -453,19 +469,16 @@ if (!function_exists('formatTanggalChat')) {
 
 
 <script>
-<?php if ($current_forum_id): // Hanya definisikan jika ada di dalam forum ?>
-
-// LANGKAH 1: Definisikan variabel global DARI PHP
-// Ini HARUS ada SEBELUM memanggil file chat_app.js
+<?php if ($current_forum_id): ?>
+// Variabel Global untuk JS
 const CURRENT_USER_ID = <?= (int)($_SESSION['user_id'] ?? 0) ?>;
 const FORUM_ID = <?= (int)$current_forum_id ?>;
 const CURRENT_USER_NAME = '<?= htmlspecialchars($_SESSION['nama_lengkap'] ?? '') ?>';
-
 <?php endif; ?>
 </script>
 
 <?php if ($current_forum_id): ?>
-
 <script src="/Sinergi/public/assets/js/chat_app.js"></script>
-
 <?php endif; ?>
+
+<script src="/Sinergi/public/assets/js/sidebar_updater.js"></script>

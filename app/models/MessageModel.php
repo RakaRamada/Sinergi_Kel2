@@ -389,4 +389,168 @@ function deleteMessage($message_id, $user_id) {
     // Jika 0, berarti pesan itu tidak ada ATAU bukan milik user ini
     return ($rows_affected > 0);
 }
+
+/**
+ * Mengambil semua media (gambar) dari sebuah forum.
+ *
+ * @param int $forum_id ID forum.
+ * @return array Array berisi daftar media.
+ */
+function getMediaByForumId($forum_id) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) {
+        error_log("Koneksi DB gagal di getMediaByForumId.");
+        return [];
+    }
+
+    $sql = "SELECT message_id, file_path, original_filename
+            FROM messages
+            WHERE forum_id = :fid 
+            AND message_type = 'image'
+            ORDER BY created_at DESC";
+    
+    $stmt = oci_parse($conn, $sql);
+    
+    $clean_forum_id = (int)$forum_id;
+    oci_bind_by_name($stmt, ':fid', $clean_forum_id, -1, SQLT_INT);
+
+    if (!oci_execute($stmt)) {
+         $e = oci_error($stmt);
+         error_log("OCI8 Error in getMediaByForumId: " . $e['message']);
+         @oci_close($conn);
+         return [];
+    }
+
+    $media = [];
+    while ($row = oci_fetch_assoc($stmt)) {
+        $media[] = array_change_key_case($row, CASE_LOWER);
+    }
+
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    return $media;
+}
+
+/**
+ * Mengambil semua dokumen dari sebuah forum.
+ *
+ * @param int $forum_id ID forum.
+ * @return array Array berisi daftar dokumen.
+ */
+function getDocumentsByForumId($forum_id) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) {
+        error_log("Koneksi DB gagal di getDocumentsByForumId.");
+        return [];
+    }
+
+    // Kita JOIN dengan USERS untuk dapat nama pengirim
+    $sql = "SELECT 
+                m.message_id, 
+                m.file_path, 
+                m.original_filename, 
+                TO_CHAR(m.created_at, 'DD Mon YYYY') AS created_at_formatted,
+                u.nama_lengkap AS sender_nama
+            FROM 
+                messages m
+            JOIN 
+                users u ON m.sender_id = u.user_id
+            WHERE 
+                m.forum_id = :fid 
+            AND 
+                m.message_type = 'document'
+            ORDER BY 
+                m.created_at DESC";
+    
+    $stmt = oci_parse($conn, $sql);
+    
+    $clean_forum_id = (int)$forum_id;
+    oci_bind_by_name($stmt, ':fid', $clean_forum_id, -1, SQLT_INT);
+
+    if (!oci_execute($stmt)) {
+         $e = oci_error($stmt);
+         error_log("OCI8 Error in getDocumentsByForumId: " . $e['message']);
+         @oci_close($conn);
+         return [];
+    }
+
+    $documents = [];
+    while ($row = oci_fetch_assoc($stmt)) {
+        $documents[] = array_change_key_case($row, CASE_LOWER);
+    }
+
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    return $documents;
+}
+
+/**
+ * Memperbarui 'pesan terakhir dibaca' oleh user di sebuah forum.
+ * VERSI BARU: Meng-UPDATE tabel forum_members
+ * --- PERBAIKAN ORA-01745 (FINAL V6 - GANTI NAMA BIND) ---
+ *
+ * @param int $user_id ID user yang sedang membaca
+ * @param int $forum_id ID forum yang sedang dibuka
+ * @return bool
+ */
+function updateLastReadMessage($user_id, $forum_id) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) {
+        error_log("Koneksi DB gagal di updateLastReadMessage.");
+        return false;
+    }
+
+    $clean_user_id = (int)$user_id;
+    $clean_forum_id = (int)$forum_id;
+
+    // 1. Cari ID pesan terakhir
+    $sql_max_id = "SELECT MAX(message_id) AS max_id FROM messages WHERE forum_id = :fid_max"; // Nama unik
+    $stmt_max = oci_parse($conn, $sql_max_id);
+    oci_bind_by_name($stmt_max, ':fid_max', $clean_forum_id, -1, SQLT_INT); // Nama unik
+    
+    if (!oci_execute($stmt_max)) {
+        error_log("OCI8 Error get MAX_ID in updateLastReadMessage: " . oci_error($stmt_max)['message']);
+        @oci_close($conn);
+        return false;
+    }
+    
+    $row = oci_fetch_assoc($stmt_max);
+    $max_message_id = $row ? (int)$row['MAX_ID'] : 0;
+    oci_free_statement($stmt_max);
+
+    if ($max_message_id == 0) {
+        @oci_close($conn);
+        return true; 
+    }
+
+    // 2. Query UPDATE (DENGAN NAMA BARU YANG AMAN)
+    // =======================================================
+    // PERBAIKAN DI SINI:
+    // :max_id -> :newmessageid
+    // :uid -> :currentuserid
+    // :fid -> :currentforumid
+    // =======================================================
+    $sql_update = "UPDATE forum_members 
+                   SET last_read_message_id = :newmessageid
+                   WHERE user_id = :currentuserid AND forum_id = :currentforumid"; 
+    
+    $stmt_update = oci_parse($conn, $sql_update);
+
+    // Bind semua parameter dengan NAMA BARU
+    oci_bind_by_name($stmt_update, ':newmessageid', $max_message_id, -1, SQLT_INT);
+    oci_bind_by_name($stmt_update, ':currentuserid', $clean_user_id, -1, SQLT_INT);
+    oci_bind_by_name($stmt_update, ':currentforumid', $clean_forum_id, -1, SQLT_INT);
+
+    // Ini adalah line 544 kamu (sekarang)
+    if (!oci_execute($stmt_update)) {
+        $e = oci_error($stmt_update);
+        error_log("OCI8 Error UPDATE in updateLastReadMessage: " . $e['message']);
+        @oci_close($conn);
+        return false;
+    }
+
+    oci_free_statement($stmt_update);
+    @oci_close($conn);
+    return true;
+}
 ?>
