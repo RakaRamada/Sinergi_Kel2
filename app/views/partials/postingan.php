@@ -29,14 +29,12 @@ document.addEventListener('DOMContentLoaded', function() {
         imageInput.addEventListener('change', function() {
             const file = this.files[0];
             if (file) {
-                // Validasi tipe file gambar
                 if (!file.type.startsWith('image/')) {
                     alert('Mohon pilih file gambar yang valid.');
                     this.value = '';
                     return;
                 }
                 
-                // Validasi ukuran file (max 5MB)
                 if (file.size > 5 * 1024 * 1024) {
                     alert('Ukuran file terlalu besar. Maksimal 5MB.');
                     this.value = '';
@@ -53,7 +51,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Tombol Hapus Preview (X)
     if (removeImageBtn) {
         removeImageBtn.addEventListener('click', function() {
             if(imageInput) imageInput.value = '';
@@ -63,13 +60,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ==================================================
-    // 3. LOGIKA SUBMIT POSTINGAN (UPLOAD AJAX)
+    // 3. LOGIKA SUBMIT POSTINGAN
     // ==================================================
     if (createPostForm) { 
         createPostForm.addEventListener('submit', function(e) {
             e.preventDefault();
 
-            // Validasi Input
             const kontenInput = this.querySelector('textarea[name="konten"]');
             const konten = kontenInput ? kontenInput.value.trim() : '';
             const hasImage = imageInput && imageInput.files.length > 0;
@@ -79,7 +75,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // UI Loading
             if(submitButton) {
                 submitButton.disabled = true;
                 submitButton.textContent = 'Memposting...';
@@ -94,15 +89,10 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
-                    // Reset Form
                     createPostForm.reset(); 
                     if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
                     if (imagePreview) imagePreview.src = '#';
-                    
-                    // Reload Feed
                     loadPosts(); 
-                    
-                    // Scroll ke atas
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 } else {
                     alert('Gagal: ' + (data.message || 'Terjadi kesalahan server'));
@@ -122,7 +112,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ==================================================
-    // 4. FUNGSI LOAD POSTINGAN (FEED)
+    // 4. FUNGSI LOAD POSTINGAN
     // ==================================================
     function loadPosts() {
         if (!postFeedContainer) return; 
@@ -147,7 +137,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 posts.forEach(post => {
-                    // Render Gambar Postingan
                     const postImageHTML = post.POST_IMAGE ? 
                         `<div class="mt-3 mb-1">
                             <img src="${escapeHtml(post.POST_IMAGE)}" 
@@ -157,15 +146,12 @@ document.addEventListener('DOMContentLoaded', function() {
                                  style="max-height: 500px;">
                          </div>` : '';
 
-                    // Logic Warna Like (Pakai Filter Merah)
                     const isLiked = post.USER_SUDAH_LIKE > 0;
                     const likeColorClass = isLiked ? 'text-red-500' : 'text-gray-500';
                     const iconFilterClass = isLiked ? 'filter-red' : '';
 
-                    // Escape HTML untuk keamanan
                     const kontenText = post.KONTEN ? escapeHtml(post.KONTEN) : '';
 
-                    // HTML Template
                     const postHTML = `
                         <div class="bg-white border-b border-gray-200 hover:bg-gray-50/30 transition-colors">
                             <div class="p-4">
@@ -218,7 +204,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </a>
 
                                             <button class="group flex items-center space-x-2 hover:text-green-500 transition-colors w-fit"
-                                                    onclick="alert('Fitur laporan akan segera hadir!')">
+                                                    onclick="openReportModal(${post.POST_ID})">
                                                 <div class="p-2 rounded-full group-hover:bg-green-50 transition-colors">
                                                     <img src="/Sinergi/public/assets/icons/report.svg" 
                                                          alt="Laporkan" 
@@ -246,13 +232,9 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
     
-    // Jalankan Load Posts Saat Awal
     loadPosts();
-    
-    // Expose ke global agar bisa dipanggil dari luar
     window.loadPosts = loadPosts;
 
-    // Helper function untuk escape HTML (keamanan XSS)
     function escapeHtml(text) {
         if(!text) return '';
         const map = {
@@ -273,31 +255,24 @@ document.addEventListener('DOMContentLoaded', function() {
 // 5. FUNGSI GLOBAL (Like & Modal)
 // ==================================================
 
-// Fungsi Handle Like
 function handleLike(btn, postId) {
     const countSpan = btn.querySelector('.like-count');
     const iconImg = btn.querySelector('img'); 
     let currentCount = parseInt(countSpan.innerText) || 0;
-    
-    // Cek apakah sedang di-like atau unlike
     const isCurrentlyLiked = btn.classList.contains('text-red-500');
     
-    // Toggle UI immediately (optimistic update)
     if (isCurrentlyLiked) {
-        // UNLIKE
         btn.classList.remove('text-red-500');
         btn.classList.add('text-gray-500');
         iconImg.classList.remove('filter-red');
         countSpan.innerText = Math.max(0, currentCount - 1);
     } else {
-        // LIKE
         btn.classList.add('text-red-500');
         btn.classList.remove('text-gray-500');
         iconImg.classList.add('filter-red');
         countSpan.innerText = currentCount + 1;
     }
 
-    // Kirim ke Server
     const formData = new FormData();
     formData.append('post_id', postId);
 
@@ -309,7 +284,6 @@ function handleLike(btn, postId) {
     .then(data => {
         if (data.status !== 'success') {
             console.error("Like gagal:", data.message);
-            // Revert UI jika gagal
             if (isCurrentlyLiked) {
                 btn.classList.add('text-red-500');
                 btn.classList.remove('text-gray-500');
@@ -326,7 +300,6 @@ function handleLike(btn, postId) {
     })
     .catch(err => {
         console.error('Error Like API:', err);
-        // Revert UI jika error
         if (isCurrentlyLiked) {
             btn.classList.add('text-red-500');
             btn.classList.remove('text-gray-500');
@@ -342,13 +315,10 @@ function handleLike(btn, postId) {
     });
 }
 
-// Fungsi Modal Gambar (Posisi Tengah Layar)
 function openImageModal(imageSrc) {
-    // Hapus modal lama jika ada
     const oldModal = document.getElementById('image-modal-overlay');
     if(oldModal) oldModal.remove();
 
-    // Buat Overlay
     const modal = document.createElement('div');
     modal.id = 'image-modal-overlay';
     modal.style.cssText = `
@@ -358,10 +328,8 @@ function openImageModal(imageSrc) {
         padding: 20px; backdrop-filter: blur(5px);
     `;
     
-    // Klik background tutup modal
     modal.onclick = function() { modal.remove(); };
 
-    // Gambar
     const img = document.createElement('img');
     img.src = imageSrc;
     img.style.cssText = `
@@ -371,7 +339,6 @@ function openImageModal(imageSrc) {
     `;
     img.onclick = function(e) { e.stopPropagation(); };
 
-    // Tombol Close
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = '&times;';
     closeBtn.style.cssText = `
@@ -388,26 +355,154 @@ function openImageModal(imageSrc) {
     modal.appendChild(img);
     document.body.appendChild(modal);
 }
+
+// ==================================================
+// 6. FUNGSI REPORT POSTINGAN
+// ==================================================
+
+function openReportModal(postId) {
+    const oldModal = document.getElementById('report-modal-overlay');
+    if(oldModal) oldModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'report-modal-overlay';
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+    modal.style.backdropFilter = 'blur(5px)';
+    
+    modal.innerHTML = `
+        <div class="bg-white rounded-lg max-w-md w-full p-6 shadow-xl" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-900">Laporkan Postingan</h3>
+                <button onclick="closeReportModal()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <form id="report-form" onsubmit="submitReport(event, ${postId})">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Pilih alasan laporan:
+                    </label>
+                    
+                    <div class="space-y-2">
+                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input type="radio" name="reason" value="Spam atau konten menyesatkan" class="mr-3" required>
+                            <span class="text-sm">Spam atau konten menyesatkan</span>
+                        </label>
+                        
+                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input type="radio" name="reason" value="Ujaran kebencian atau pelecehan" class="mr-3" required>
+                            <span class="text-sm">Ujaran kebencian atau pelecehan</span>
+                        </label>
+                        
+                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input type="radio" name="reason" value="Konten kekerasan atau berbahaya" class="mr-3" required>
+                            <span class="text-sm">Konten kekerasan atau berbahaya</span>
+                        </label>
+                        
+                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input type="radio" name="reason" value="Konten tidak pantas atau dewasa" class="mr-3" required>
+                            <span class="text-sm">Konten tidak pantas atau dewasa</span>
+                        </label>
+                        
+                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input type="radio" name="reason" value="Pelanggaran privasi" class="mr-3" required>
+                            <span class="text-sm">Pelanggaran privasi</span>
+                        </label>
+                        
+                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input type="radio" name="reason" value="Lainnya" class="mr-3" required>
+                            <span class="text-sm">Lainnya</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button type="button" onclick="closeReportModal()"
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
+                        Batal
+                    </button>
+                    <button type="submit" id="report-submit-btn"
+                            class="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium">
+                        Kirim Laporan
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    modal.onclick = function() { closeReportModal(); };
+    document.body.appendChild(modal);
+}
+
+function closeReportModal() {
+    const modal = document.getElementById('report-modal-overlay');
+    if(modal) modal.remove();
+}
+
+function submitReport(event, postId) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const submitBtn = document.getElementById('report-submit-btn');
+    const selectedReason = form.querySelector('input[name="reason"]:checked');
+    
+    if (!selectedReason) {
+        alert('Pilih alasan laporan terlebih dahulu');
+        return;
+    }
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Mengirim...';
+    
+    const formData = new FormData();
+    formData.append('post_id', postId);
+    formData.append('reason', selectedReason.value);
+    
+    fetch('/Sinergi/api/tambah_laporan.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success' || data.status === true) {
+            alert('✓ Laporan berhasil dikirim. Tim kami akan meninjau konten ini.');
+            closeReportModal();
+        } else {
+            alert('Gagal: ' + (data.message || 'Terjadi kesalahan'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Terjadi kesalahan koneksi');
+    })
+    .finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Kirim Laporan';
+    });
+}
+
+window.openReportModal = openReportModal;
+window.closeReportModal = closeReportModal;
+window.submitReport = submitReport;
 </script>
 
 <style>
-    /* Helper Class untuk mengubah icon hitam menjadi merah */
     .filter-red {
         filter: invert(37%) sepia(93%) saturate(3646%) hue-rotate(335deg) brightness(97%) contrast(96%);
         transform: scale(1.15);
     }
     
-    /* Transisi halus untuk icon */
     .icon-transition {
         transition: filter 0.3s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
 
-    /* Utility tambahan */
     .break-words {
         word-break: break-word;
     }
     
-    /* Loading animation */
     @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }

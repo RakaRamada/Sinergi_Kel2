@@ -58,7 +58,13 @@ function getForumById($forum_id) {
     }
 
     // --- PERUBAHAN: Tambahkan f.forum_image ---
-    $sql = "SELECT forum_id, nama_forum, deskripsi, forum_image, created_by_user_id 
+    $sql = "SELECT 
+                forum_id, 
+                nama_forum, 
+                deskripsi, 
+                forum_image, 
+                created_by_user_id, 
+                TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at 
             FROM forums 
             WHERE forum_id = :fid";
     
@@ -84,13 +90,12 @@ function getForumById($forum_id) {
 }
 
 /**
- * Mengambil semua forum yang telah diikuti oleh user_id tertentu.
- * (Dibutuhkan oleh MessageController)
+ * Mengambil semua forum yang diikuti user, TERMASUK pesan terakhir dan hitungan belum dibaca.
+ * VERSI BARU: Menggunakan kolom 'last_read_message_id' dari 'forum_members'
  *
  * @param int $user_id ID pengguna.
- * @return array Array berisi daftar forum, atau array kosong jika tidak ada/error.
+ * @return array Array berisi daftar forum.
  */
-// Di dalam app/models/ForumModel.php
 function getForumsByUserId($user_id) {
     require __DIR__ . '/../../config/koneksi.php';
     if (!$conn) {
@@ -100,26 +105,66 @@ function getForumsByUserId($user_id) {
 
     $safe_user_id = (int)$user_id; 
 
-    // --- PERUBAHAN: Tambahkan f.forum_image ---
-    $sql = "SELECT f.forum_id, f.nama_forum, f.deskripsi, f.forum_image 
-            FROM forums f 
-            JOIN forum_members fm ON f.forum_id = fm.forum_id 
-            WHERE fm.user_id = " . $safe_user_id . " 
-            ORDER BY f.nama_forum ASC";
+    // Query ini lebih simpel! Tidak perlu LEFT JOIN ke tabel status.
+    $sql = "SELECT 
+                f.forum_id, f.nama_forum, f.forum_image,
+                lm.isi_pesan AS last_message_text,
+                lm.message_type AS last_message_type,
+                lm.sender_nama AS last_message_sender,
+                lm.sender_id AS last_message_sender_id,
+                TO_CHAR(lm.created_at, 'HH24:MI') AS last_message_time,
+                (
+                    SELECT COUNT(mc.message_id)
+                    FROM messages mc
+                    WHERE mc.forum_id = f.forum_id
+                    -- LANGSUNG AMBIL DARI fm.last_read_message_id
+                    AND mc.message_id > NVL(fm.last_read_message_id, 0) 
+                    AND mc.sender_id != :uid1 -- Jangan hitung pesan kita sendiri
+                ) AS unread_count
+            FROM 
+                forums f
+            JOIN 
+                forum_members fm ON f.forum_id = fm.forum_id
+            -- LEFT JOIN user_forum_read_status r... (INI HILANG, JADI LEBIH CEPAT)
+            OUTER APPLY (
+                SELECT 
+                    m.isi_pesan, m.message_type, m.sender_id,
+                    u.nama_lengkap AS sender_nama, m.created_at
+                FROM messages m
+                JOIN users u ON m.sender_id = u.user_id
+                WHERE m.forum_id = f.forum_id
+                ORDER BY m.created_at DESC
+                FETCH FIRST 1 ROW ONLY
+            ) lm
+            WHERE 
+                fm.user_id = :uid2
+            ORDER BY 
+                lm.created_at DESC NULLS LAST, f.nama_forum ASC";
     
     $stmt = oci_parse($conn, $sql);
     
+    // Kita bind user_id dua kali
+    oci_bind_by_name($stmt, ':uid1', $safe_user_id, -1, SQLT_INT);
+    oci_bind_by_name($stmt, ':uid2', $safe_user_id, -1, SQLT_INT);
+
     if (!oci_execute($stmt)) {
-         // ... (error handling) ...
          $e = oci_error($stmt);
-         error_log("OCI8 Error in getForumsByUserId: " . $e['message']);
+         error_log("OCI8 Error in getForumsByUserId (V3-Simple): " . $e['message']);
          @oci_close($conn);
          return [];
     }
 
     $forums = [];
     while ($row = oci_fetch_assoc($stmt)) {
-        // ... (Proses CLOB jika perlu) ...
+        // Proses CLOB untuk pesan terakhir
+        $last_message_string = '';
+        if (isset($row['LAST_MESSAGE_TEXT']) && $row['LAST_MESSAGE_TEXT'] instanceof OCILob) {
+            $last_message_string = $row['LAST_MESSAGE_TEXT']->read($row['LAST_MESSAGE_TEXT']->size());
+        } elseif (isset($row['LAST_MESSAGE_TEXT']) && is_string($row['LAST_MESSAGE_TEXT'])) {
+            $last_message_string = $row['LAST_MESSAGE_TEXT'];
+        }
+        $row['LAST_MESSAGE_TEXT'] = $last_message_string; 
+
         $forums[] = array_change_key_case($row, CASE_LOWER);
     }
 
@@ -127,6 +172,8 @@ function getForumsByUserId($user_id) {
     @oci_close($conn);
     return $forums;
 }
+
+
 /**
  * Menyimpan forum baru ke database.
  *
@@ -209,67 +256,39 @@ function createForum($nama_forum, $deskripsi, $creator_user_id, $image_name) {
  * @param string $user_nama Nama pengguna (dari session, BISA KOTOR/NULL).
  * @return bool True jika berhasil, false jika gagal.
  */
-function joinForum($user_id, $forum_id, $user_nama = 'Seseorang') {
-
-    // (require_once sudah dipindah ke atas file)
-
+function joinForum($user_id, $forum_id, $user_nama = 'Seseorang', $custom_message = null) {
     require __DIR__ . '/../../config/koneksi.php';
-    if (!$conn) { return false; }
-
+    
+    // 1. Insert ke forum_members
     $sql = "BEGIN
                 INSERT INTO forum_members (user_id, forum_id) VALUES (:uid, :fid);
             EXCEPTION
-                WHEN DUP_VAL_ON_INDEX THEN
-                    NULL; -- Abaikan jika sudah ada
+                WHEN DUP_VAL_ON_INDEX THEN NULL; 
             END;";
     
     $stmt = oci_parse($conn, $sql);
-    
     $clean_user_id = (int)$user_id;
     $clean_forum_id = (int)$forum_id;
 
-    oci_bind_by_name($stmt, ':uid', $clean_user_id, -1, SQLT_INT);
-    oci_bind_by_name($stmt, ':fid', $clean_forum_id, -1, SQLT_INT);
+    oci_bind_by_name($stmt, ':uid', $clean_user_id);
+    oci_bind_by_name($stmt, ':fid', $clean_forum_id);
 
-    // 1. Eksekusi TANPA auto-commit
     if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) { 
-         $e = oci_error($stmt);
-         error_log("OCI8 Error in joinForum: " . $e['message']);
-         oci_rollback($conn); 
-         @oci_close($conn);
-         return false;
+         // Error handling
+         @oci_close($conn); return false;
     }
-    
-    // 2. Lakukan COMMIT manual
-    if (!oci_commit($conn)) {
-        $e = oci_error($conn);
-        error_log("OCI8 Error committing in joinForum: " . $e['message']);
-        oci_rollback($conn); 
-        @oci_close($conn);
-        return false;
-    }
+    oci_commit($conn); // Commit anggota baru dulu
 
-    // === PERBAIKAN LOGIKA FINAL (DI DALAM MODEL) ===
-    
-    // 1. Ambil nama (dari parameter atau default 'Seseorang')
+    // 2. Buat Pesan Sistem
+    // Bersihkan nama
     $nama_asli = $user_nama ?? 'Seseorang';
+    $nama_final = trim(preg_replace('/[[:cntrl:]\s]/u', ' ', $nama_asli)); 
+    if (empty($nama_final)) $nama_final = 'Seseorang';
 
-    // 2. Buat versi bersih HANYA untuk tes (hapus SEMUA spasi & karakter aneh/control)
-    $nama_untuk_tes = preg_replace('/[[:cntrl:]\s]/u', '', $nama_asli);
+    // Tentukan pesan: Pakai custom jika ada, jika tidak pakai default "telah bergabung"
+    $pesan_sistem = $custom_message ? $custom_message : ($nama_final . ' telah bergabung dengan forum.');
 
-    // 3. Cek: Apakah versi bersihnya itu KOSONG?
-    $nama_final_untuk_pesan = '';
-    if (empty($nama_untuk_tes)) {
-        // Jika ya, nama itu pasti "kosong" atau spasi "ajaib". Gunakan default.
-        $nama_final_untuk_pesan = 'Seseorang';
-    } else {
-        // Jika tidak, nama itu valid. Gunakan nama ASLI (tapi trim spasi biasa).
-        $nama_final_untuk_pesan = trim($nama_asli);
-    }
-    // =============================================
-    
-    // 4. Buat pesan sistem dengan nama yang sudah DIJAMIN BERSIH
-    createSystemMessage($clean_forum_id, $clean_user_id, 'join', $nama_final_untuk_pesan . ' telah bergabung dengan forum.');
+    createSystemMessage($clean_forum_id, $clean_user_id, 'join', $pesan_sistem);
 
     oci_free_statement($stmt);
     @oci_close($conn);
@@ -530,5 +549,91 @@ function updateForum($forum_id, $nama_forum, $deskripsi, $image_name) {
     return true; // Sukses
 }
 
+/**
+ * Mengambil daftar user yang BELUM menjadi anggota forum ini.
+ * Digunakan untuk fitur "Tambah Anggota".
+ */
+function getUsersAvailableForForum($forum_id, $search = '') {
+    require __DIR__ . '/../../config/koneksi.php';
+
+    // KITA KEMBALIKAN 'foto_profil' KE SINI
+    $sql = "SELECT user_id, username, nama_lengkap, foto_profil 
+            FROM users 
+            WHERE user_id NOT IN (
+                SELECT user_id FROM forum_members WHERE forum_id = :fid
+            )";
+
+    if (!empty($search)) {
+        $sql .= " AND (UPPER(nama_lengkap) LIKE :search OR UPPER(username) LIKE :search)";
+    }
+
+    $sql .= " ORDER BY nama_lengkap ASC FETCH FIRST 20 ROWS ONLY"; 
+
+    $stmt = oci_parse($conn, $sql);
+    
+    $fid = (int)$forum_id;
+    oci_bind_by_name($stmt, ':fid', $fid);
+
+    if (!empty($search)) {
+        $s = '%' . strtoupper($search) . '%';
+        oci_bind_by_name($stmt, ':search', $s);
+    }
+
+    if (!@oci_execute($stmt)) {
+        return [];
+    }
+
+    $users = [];
+    while ($row = oci_fetch_assoc($stmt)) {
+        // Pastikan key jadi huruf kecil (foto_profil)
+        $users[] = array_change_key_case($row, CASE_LOWER);
+    }
+    
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    return $users;
+} 
+
+/**
+ * Mengeluarkan member secara paksa (Kick).
+ * Pesan sistem: "User X dikeluarkan oleh Admin."
+ */
+function kickMember($forum_id, $target_user_id, $target_user_name) {
+    require __DIR__ . '/../../config/koneksi.php';
+
+    // 1. Pesan Sistem (Jalan duluan, koneksi sendiri)
+    $nama_final = trim(preg_replace('/[[:cntrl:]\s]/u', ' ', $target_user_name));
+    if(empty($nama_final)) $nama_final = 'Member';
+    
+    createSystemMessage((int)$forum_id, (int)$target_user_id, 'leave', $nama_final . ' telah dikeluarkan oleh Admin Forum.');
+
+    // 2. Hapus dari database
+    // GANTI :uid JADI :p_user_id
+    $sql = "DELETE FROM forum_members 
+            WHERE user_id = :p_user_id AND forum_id = :p_forum_id";
+            
+    $stmt = oci_parse($conn, $sql);
+    
+    $clean_uid = (int)$target_user_id;
+    $clean_fid = (int)$forum_id;
+    
+    // Bind dengan nama baru yang AMAN
+    oci_bind_by_name($stmt, ':p_user_id', $clean_uid);
+    oci_bind_by_name($stmt, ':p_forum_id', $clean_fid);
+
+    // Eksekusi (Auto Commit Default)
+    $res = oci_execute($stmt); 
+    
+    if (!$res) {
+        $e = oci_error($stmt);
+        // Log error biar kita tau kalau ada apa-apa
+        error_log("Gagal Kick (SQL Error): " . $e['message']);
+    }
+    
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    
+    return $res;
+}
 
 ?>

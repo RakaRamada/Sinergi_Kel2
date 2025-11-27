@@ -1,81 +1,119 @@
 <?php
 // File: api/ambil_postingan.php
 
+// 1. Matikan tampilan error HTML agar tidak merusak JSON
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
+// 2. Mulai Session & Header JSON
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
-require_once __DIR__. '/../config/koneksi.php';
-
 header('Content-Type: application/json');
-$current_user_id = $_SESSION['user_id'] ?? 0;
 
-// === QUERY DIPERBAIKI: SINKRONISASI NAMA KOLOM ===
-$sql = "
-    SELECT 
-        p.post_id AS POST_ID,    
-        p.user_id AS USER_ID,
-        p.konten AS KONTEN,
-        p.post_image AS POST_IMAGE,
-        
-        p.like_count AS TOTAL_LIKES,       
-        p.comment_count AS TOTAL_COMMENTS, 
-        
-        TO_CHAR(p.created_at, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_AT_STR,
-        
-        u.username AS USERNAME,
-        u.nama_lengkap AS NAMA_LENGKAP,
-        u.avatar_url AS AVATAR_URL,
-        
-        (SELECT COUNT(*) 
-         FROM likes l 
-         WHERE l.post_id = p.post_id AND l.user_id = :current_user_id_bv) AS USER_SUDAH_LIKE
-    FROM 
-        postingan p
-    JOIN 
-        users u ON p.user_id = u.user_id
-    ORDER BY 
-        p.post_id DESC
-";
+// 3. DEFINISI PATH
+$path_koneksi = __DIR__ . '/../config/koneksi.php';
+$path_model   = __DIR__ . '/../app/models/PostModel.php';
 
-$stmt = oci_parse($conn, $sql);
-oci_bind_by_name($stmt, ':current_user_id_bv', $current_user_id);
-
-if (!oci_execute($stmt)) {
-    $e = oci_error($stmt);
-    echo json_encode(['status' => 'error', 'message' => $e['message']]);
+// --- DEBUGGING PATH ---
+if (!file_exists($path_koneksi)) {
+    echo json_encode(['status' => 'error', 'message' => 'File Koneksi tidak ditemukan di: ' . $path_koneksi]);
     exit;
 }
 
-$feed_data = [];
-$default_avatar_file = '/Sinergi/public/assets/images/user.png';
-$default_avatar_dir = '/Sinergi/public/assets/images/';
-
-while ($row = oci_fetch_assoc($stmt)) {
-    // Perbaiki Avatar
-    if (empty($row['AVATAR_URL']) || $row['AVATAR_URL'] == $default_avatar_dir) {
-        $row['AVATAR_URL_FIXED'] = $default_avatar_file;
-    } else {
-        $row['AVATAR_URL_FIXED'] = $row['AVATAR_URL'];
-    }
-
-    // Perbaiki Waktu
-    $timestamp = strtotime($row['CREATED_AT_STR']); 
-    if ($timestamp === false) {
-        $row['WAKTU_POSTING'] = '-';
-    } else {
-        $diff = time() - $timestamp;
-        if ($diff < 60) { $row['WAKTU_POSTING'] = 'Baru saja'; }
-        else if ($diff < 3600) { $row['WAKTU_POSTING'] = floor($diff / 60) . 'm'; }
-        else if ($diff < 86400) { $row['WAKTU_POSTING'] = floor($diff / 3600) . 'j'; }
-        else { $row['WAKTU_POSTING'] = date('d M', $timestamp); }
-    }
-    
-    $feed_data[] = $row;
+if (!file_exists($path_model)) {
+    echo json_encode(['status' => 'error', 'message' => 'File Model tidak ditemukan di: ' . $path_model]);
+    exit;
 }
 
-echo json_encode($feed_data);
+// 4. Require File
+require_once $path_koneksi;
+require_once $path_model;
 
-oci_free_statement($stmt);
-oci_close($conn);
+// Pastikan variabel koneksi database tersedia
+global $conn; 
+
+if (!$conn) {
+    echo json_encode(['status' => 'error', 'message' => 'Koneksi database gagal atau variabel $conn tidak ditemukan.']);
+    exit;
+}
+
+// 5. Eksekusi Model
+try {
+    $userId = $_SESSION['user_id'] ?? 0;
+    
+    // DEBUGGING: Cek User ID
+    if ($userId === 0) {
+        echo json_encode(['status' => 'error', 'message' => 'User belum login atau session hilang.']);
+        exit;
+    }
+    
+    // Instansiasi Model
+    $postModel = new PostModel($conn);
+    
+    // Ambil Data dengan error handling
+    try {
+        $posts = $postModel->getAllPosts($userId);
+    } catch (Exception $e) {
+        echo json_encode([
+            'status' => 'error', 
+            'message' => 'Error saat mengambil postingan: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        exit;
+    }
+
+    // Cek apakah ada data
+    if (!is_array($posts)) {
+        echo json_encode(['status' => 'error', 'message' => 'Format data tidak valid dari database.']);
+        exit;
+    }
+
+    // Format Data (Avatar & Waktu)
+    $formatted = [];
+    $default_avatar_file = '/Sinergi/public/assets/images/user.png';
+    $default_avatar_dir = '/Sinergi/public/assets/images/';
+
+    foreach ($posts as $row) {
+        // Fix Avatar
+        if (empty($row['AVATAR_URL']) || $row['AVATAR_URL'] == $default_avatar_dir) {
+            $row['AVATAR_URL_FIXED'] = $default_avatar_file;
+        } else {
+            $row['AVATAR_URL_FIXED'] = $row['AVATAR_URL'];
+        }
+
+        // Fix Waktu
+        $timestamp = strtotime($row['CREATED_AT_STR']); 
+        if ($timestamp === false) {
+            $row['WAKTU_POSTING'] = '-';
+        } else {
+            $diff = time() - $timestamp;
+            if ($diff < 60) { 
+                $row['WAKTU_POSTING'] = 'Baru saja'; 
+            } else if ($diff < 3600) { 
+                $row['WAKTU_POSTING'] = floor($diff / 60) . 'm'; 
+            } else if ($diff < 86400) { 
+                $row['WAKTU_POSTING'] = floor($diff / 3600) . 'j'; 
+            } else { 
+                $row['WAKTU_POSTING'] = date('d M', $timestamp); 
+            }
+        }
+        $formatted[] = $row;
+    }
+
+    echo json_encode($formatted);
+
+} catch (Exception $e) {
+    echo json_encode([
+        'status' => 'error', 
+        'message' => 'Server Error: ' . $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine()
+    ]);
+}
+
+// Tutup koneksi
+if ($conn) {
+    oci_close($conn);
+}
 ?>

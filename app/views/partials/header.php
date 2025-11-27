@@ -9,7 +9,6 @@
 </head>
 
 <body class="bg-gray-50">
-
     <div class="max-w-7xl mx-auto bg-white">
         <div class="grid grid-cols-12">
 

@@ -2,6 +2,11 @@
 // File: app/controllers/ForumController.php
 
 require_once __DIR__ . '/../models/ForumModel.php';
+// --- TAMBAHAN BARU ---
+// Kita butuh ini untuk memanggil getMediaByForumId dan getDocumentsByForumId
+require_once __DIR__ . '/../models/MessageModel.php';
+// --- AKHIR TAMBAHAN BARU ---
+
 
 /**
  * Menampilkan halaman/view 'Buat Forum'
@@ -152,11 +157,9 @@ function showForumDetails() {
         $forum_id = (int)$_GET['forum_id'];
 
         // 2. Panggil Model untuk data dasar forum
-        // (Fungsi getForumById() sudah kita buat sebelumnya)
         $forum_info = getForumById($forum_id);
 
         // 3. Panggil Model untuk daftar anggota
-        // (Fungsi getForumMembers() akan kita BUAT DI LANGKAH SELANJUTNYA)
         $forum_members = getForumMembers($forum_id); 
 
         // 4. Cek apakah user ini adalah pembuat forum (untuk tombol 'Edit')
@@ -165,8 +168,16 @@ function showForumDetails() {
             $is_creator = ($forum_info['created_by_user_id'] == $user_id);
         }
 
-        // 5. Muat file view (yang akan kita BUAT DI LANGKAH SELANJUTNYA)
-        // dan kirimkan semua data yang kita kumpulkan
+        // --- TAMBAHAN BARU ---
+        // 5. Panggil Model untuk media dan dokumen
+        $forum_media = getMediaByForumId($forum_id);
+        $forum_documents = getDocumentsByForumId($forum_id);
+        // --- AKHIR TAMBAHAN BARU ---
+
+
+        // 6. Muat file view
+        //    (Variabel $forum_media dan $forum_documents otomatis akan
+        //     tersedia di dalam file view)
         require 'app/views/forum_details.php';
 
     } else {
@@ -197,16 +208,12 @@ function handleExitForum() {
         $nama_asli = $_SESSION['nama_lengkap'] ?? '';
         
         // 2. Buat versi bersih HANYA untuk tes (hapus SEMUA spasi & karakter aneh/control)
-        //    [[:cntrl:]] -> semua control character (termasuk null byte \0)
-        //    \s          -> semua whitespace (termasuk spasi "ajaib" \u)
         $nama_untuk_tes = preg_replace('/[[:cntrl:]\s]/u', '', $nama_asli);
 
         // 3. Cek: Apakah versi bersihnya itu KOSONG?
         if (empty($nama_untuk_tes)) {
-            // Jika ya, nama itu pasti "kosong" atau spasi "ajaib". Gunakan default.
             $user_nama = 'Seseorang';
         } else {
-            // Jika tidak, nama itu valid. Gunakan nama ASLI (tapi trim spasi biasa).
             $user_nama = trim($nama_asli);
         }
         // ---------------------------------
@@ -253,7 +260,6 @@ function showEditForm() {
         if ($forum_info && isset($forum_info['created_by_user_id']) && $forum_info['created_by_user_id'] == $user_id) {
             
             // 4. Muat file view (yang sudah kita buat)
-            // Kirimkan data $forum_info ke view agar form bisa terisi
             require 'app/views/edit_forum.php';
 
         } else {
@@ -291,7 +297,6 @@ function handleUpdateForum() {
         $forum_image_file = $_FILES['forum_image']; 
 
         // 3. Validasi Keamanan: Cek apakah user ini adalah pembuat forum
-        //    (Kita panggil getForumById() untuk cek creator DAN untuk ambil nama file gambar lama)
         $forum_info = getForumById($forum_id); 
         if (!$forum_info || $forum_info['created_by_user_id'] != $user_id) {
             // Jika bukan pembuat, atau forum tidak ada, tendang ke login
@@ -328,7 +333,6 @@ function handleUpdateForum() {
         }
         
         // 6. Panggil Model untuk UPDATE
-        //    (Model function 'updateForum' sudah kamu sediakan dan terlihat benar)
         $success = updateForum($forum_id, $nama_forum, $deskripsi, $image_name_to_db);
 
         if ($success) {
@@ -346,6 +350,143 @@ function handleUpdateForum() {
         header('Location: index.php?page=login');
         exit();
     }
+}
+
+/**
+ * Menampilkan halaman pencarian user untuk ditambahkan ke forum.
+ * Hanya bisa diakses oleh Pembuat Forum (Admin).
+ */
+function showAddMemberForm() {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+
+    if (!isset($_SESSION['user_id']) || !isset($_GET['forum_id'])) {
+        header('Location: index.php?page=dashboard');
+        exit();
+    }
+
+    $user_id = (int)$_SESSION['user_id'];
+    $forum_id = (int)$_GET['forum_id'];
+    $search = $_GET['q'] ?? '';
+
+    // 1. Cek apakah user adalah Admin Forum
+    $forum = getForumById($forum_id);
+    if (!$forum || $forum['created_by_user_id'] != $user_id) {
+        // Bukan admin? Tendang balik.
+        header("Location: index.php?page=forum-details&forum_id=$forum_id&error=not_admin");
+        exit();
+    }
+
+    // 2. Ambil daftar user yang BELUM masuk forum
+    // Kita perlu require UserModel untuk data user (opsional, tapi fungsi getAvailable ada di ForumModel)
+    $available_users = getUsersAvailableForForum($forum_id, $search);
+
+    require 'app/views/add_member.php';
+}
+
+/**
+ * Memproses penambahan anggota oleh Admin.
+ */
+function handleAddMemberProcess() {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $admin_id = (int)$_SESSION['user_id'];
+        $forum_id = (int)$_POST['forum_id'];
+        $target_user_id = (int)$_POST['target_user_id'];
+        $target_user_name = $_POST['target_user_name'];
+
+        // 1. Validasi Admin
+        $forum = getForumById($forum_id);
+        if (!$forum || $forum['created_by_user_id'] != $admin_id) {
+            // Kalau bukan admin, balikin ke detail forum dengan error
+            header("Location: index.php?page=forum-details&forum_id=$forum_id&error=not_admin");
+            exit();
+        }
+
+        // SIAPKAN PESAN KUSTOM
+        $pesan_khusus = "$target_user_name telah ditambahkan oleh Admin Forum.";
+
+        // 2. Masukkan User (Panggil joinForum dengan parameter ke-4)
+        $success = joinForum($target_user_id, $forum_id, $target_user_name, $pesan_khusus);
+
+        // --- PERBAIKAN DI SINI ---
+        // Jangan redirect ke 'add-member', tapi ke 'forum-details'
+        if ($success) {
+            header("Location: index.php?page=forum-details&forum_id=$forum_id&success=member_added");
+        } else {
+            header("Location: index.php?page=forum-details&forum_id=$forum_id&error=failed_add");
+        }
+        exit();
+    }
+}
+
+/**
+ * Memproses Kick Member.
+ */
+function handleKickMember() {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+
+    if (!isset($_GET['forum_id']) || !isset($_GET['user_id'])) {
+        header('Location: index.php?page=dashboard');
+        exit();
+    }
+
+    $admin_id = (int)$_SESSION['user_id'];
+    $forum_id = (int)$_GET['forum_id'];
+    $target_id = (int)$_GET['user_id'];
+    $target_name = $_GET['name'] ?? 'Member';
+
+    // 1. Validasi Admin
+    $forum = getForumById($forum_id);
+    if (!$forum || $forum['created_by_user_id'] != $admin_id) {
+        header("Location: index.php?page=forum-details&forum_id=$forum_id&error=not_admin");
+        exit();
+    }
+
+    // 2. Jangan biarkan admin kick diri sendiri
+    if ($admin_id == $target_id) {
+        header("Location: index.php?page=forum-details&forum_id=$forum_id&error=cannot_kick_self");
+        exit();
+    }
+
+    // 3. Lakukan Kick
+    kickMember($forum_id, $target_id, $target_name);
+
+    header("Location: index.php?page=forum-details&forum_id=$forum_id&success=kicked");
+    exit();
+}
+
+/**
+ * API: Mengembalikan daftar user yang bisa ditambahkan dalam format JSON.
+ * Dipanggil oleh JavaScript di Modal saat mengetik pencarian.
+ */
+function searchCandidatesAPI() {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    
+    // Cek Admin
+    if (!isset($_SESSION['user_id']) || !isset($_GET['forum_id'])) {
+        echo json_encode([]);
+        exit;
+    }
+
+    $user_id = (int)$_SESSION['user_id'];
+    $forum_id = (int)$_GET['forum_id'];
+    $keyword = $_GET['q'] ?? '';
+
+    // Validasi Admin
+    $forum = getForumById($forum_id);
+    if (!$forum || $forum['created_by_user_id'] != $user_id) {
+        echo json_encode([]);
+        exit;
+    }
+
+    // Ambil data dari Model
+    $candidates = getUsersAvailableForForum($forum_id, $keyword);
+    
+    // Kirim sebagai JSON
+    header('Content-Type: application/json');
+    echo json_encode($candidates);
+    exit;
 }
 
 ?>

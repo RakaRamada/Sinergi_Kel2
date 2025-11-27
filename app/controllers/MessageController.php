@@ -10,52 +10,51 @@ require_once __DIR__ . '/../models/ForumModel.php';
  */
 function showMessages() {
     // --- PERBAIKAN PRG (POST-REDIRECT-GET) ---
-    // Jika ada yang mencoba POST ke halaman ini...
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        //...tendang mereka kembali ke halaman ini via GET
         header('Location: ' . $_SERVER['REQUEST_URI']);
         exit();
     }
-    // 0. Mulai session (Sangat penting untuk mendapatkan $_SESSION['user_id'])
+    
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
     
-    // 1. Ambil ID forum dari URL (?forum_id=...)
     $forum_id = $_GET['forum_id'] ?? null; 
-
-    // 2. Siapkan variabel untuk data yang akan dikirim ke view
     $messages = [];
-    $forumInfo = null; // Info forum yang sedang dibuka (jika ada)
-    $forums = []; // Daftar semua forum (untuk sidebar)
+    $forumInfo = null;
+    $forums = []; 
 
-    // 3. --- INI PERUBAHAN UTAMA ---
-    // Pastikan user sudah login sebelum mencoba mengambil forum mereka
+    // Pastikan user sudah login
     if (isset($_SESSION['user_id'])) {
-        // Panggil fungsi baru: getForumsByUserId
-        // Bukan lagi getAllForums()
-        $forums = getForumsByUserId((int)$_SESSION['user_id']);
+        $user_id = (int)$_SESSION['user_id']; // <-- Ambil user_id
+        
+        // Panggil fungsi V2 yang baru (sudah ada notif/snippet)
+        $forums = getForumsByUserId($user_id);
+        
+    } else {
+        // Jika tidak login, $forums akan kosong
+        // Auth Guard di index.php akan menangani
     }
-    // Jika user tidak login, $forums akan tetap [] (array kosong)
-    // dan 'Auth Guard' di index.php akan mengarahkan mereka ke login.
-    // ----------------------------
 
-    // 4. Jika ada forum_id di URL, ambil pesan untuk forum tersebut
-    if ($forum_id) {
-        // Panggil fungsi dari MessageModel
+    // Jika ada forum_id di URL, ambil pesan untuk forum tersebut
+    if ($forum_id && isset($user_id)) { // <-- Pastikan user_id ada
+        
         $messages = getMessagesByForumId((int)$forum_id);
-
-        // Ambil info forum yang sedang dibuka
         $forumInfo = getForumById((int)$forum_id);
+
+        // --- INI DIA PERUBAHAN UTAMANYA ---
+        // Saat user membuka chat, kita update "terakhir dibaca"
+        // Ini akan otomatis menghapus notif di sidebar
+        updateLastReadMessage($user_id, (int)$forum_id);
+        // --- AKHIR PERUBAHAN ---
     }
     
-    // 5. Muat file view dan kirimkan data
     require 'app/views/messages.php'; 
 }
 
 /**
  * Menyimpan pesan baru yang dikirim dari form (via AJAX).
- * -- VERSI BARU: Bisa menangani Teks dan File Upload --
+ * -- VERSI BARU: Bisa menangani File Upload dan Reply --
  */
 function storeMessage() {
     if (session_status() === PHP_SESSION_NONE) {
@@ -73,10 +72,15 @@ function storeMessage() {
     // 2. Ambil data dasar
     $forum_id = (int)$_POST['forum_id'];
     $sender_id = (int)$_SESSION['user_id'];
-    $isi_pesan = trim($_POST['isi_pesan'] ?? ''); // Ini adalah caption atau teks
-    $file = $_FILES['file_upload'] ?? null;       // Ini adalah file yang di-upload
+    $isi_pesan = trim($_POST['isi_pesan'] ?? ''); 
+    $file = $_FILES['file_upload'] ?? null;       
 
-    // 3. Validasi: Pesan tidak boleh kosong JIKA tidak ada file
+    // --- 3. BARU: Ambil ID Balasan dari form ---
+    // Jika tidak ada, default-nya 0 (yang akan jadi NULL di Model)
+    $reply_to_message_id = (int)($_POST['reply_to_message_id'] ?? 0);
+    // --- AKHIR BARU ---
+
+    // 4. Validasi: Pesan tidak boleh kosong JIKA tidak ada file
     if (empty($isi_pesan) && (empty($file) || $file['error'] !== UPLOAD_ERR_OK)) {
         header('Content-Type: application/json');
         http_response_code(400); // Bad Request
@@ -84,28 +88,24 @@ function storeMessage() {
         exit();
     }
 
-    // 4. Siapkan variabel untuk Model (default-nya adalah 'text')
+    // 5. Siapkan variabel untuk Model (default-nya adalah 'text')
     $message_type = 'text';
     $file_path_to_db = null;
     $original_filename = null;
 
-    // 5. Logika jika ADA FILE yang di-upload
+    // 6. Logika jika ADA FILE yang di-upload
     if ($file && $file['error'] === UPLOAD_ERR_OK) {
         
-        // Tentukan folder upload (PASTIKAN FOLDER INI ADA DAN BISA DITULIS)
         $upload_dir = 'public/uploads/forum_files/'; 
         if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0775, true); // Coba buat folder jika tidak ada
+            mkdir($upload_dir, 0775, true);
         }
 
         $original_filename = basename($file['name']);
         $extension = strtolower(pathinfo($original_filename, PATHINFO_EXTENSION));
-        
-        // Buat nama file yang unik untuk disimpan di server
         $file_path_to_db = uniqid('file_', true) . '.' . $extension;
         $destination = $upload_dir . $file_path_to_db;
 
-        // Tentukan message_type berdasarkan ekstensi
         $image_types = ['jpg', 'jpeg', 'png', 'gif'];
         $doc_types = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'];
 
@@ -114,14 +114,12 @@ function storeMessage() {
         } elseif (in_array($extension, $doc_types)) {
             $message_type = 'document';
         } else {
-            // Jika tipe file tidak dikenal (tidak sesuai 'accept' di HTML/JS)
             header('Content-Type: application/json');
             http_response_code(400);
             echo json_encode(['error' => 'Tipe file tidak diizinkan.']);
             exit();
         }
 
-        // Pindahkan file dari 'tmp' ke folder 'forum_files'
         if (!move_uploaded_file($file['tmp_name'], $destination)) {
             header('Content-Type: application/json');
             http_response_code(500);
@@ -130,30 +128,29 @@ function storeMessage() {
         }
     }
     
-    // 6. Panggil Model (Langkah 5)
-    // Kita akan ubah createMessage() agar menerima parameter baru
+    // 7. Panggil Model (dengan parameter reply_to_message_id)
     $newMessageId = createMessage(
         $forum_id, 
         $sender_id, 
         $isi_pesan, 
         $message_type, 
         $file_path_to_db, 
-        $original_filename
+        $original_filename,
+        $reply_to_message_id // <-- 4. Parameter BARU diteruskan ke Model
     );
     
     if ($newMessageId) {
-        // 7. Berhasil! Ambil data lengkap (Model getMessageById juga akan kita update)
+        // 8. Berhasil! Ambil data lengkap (getMessageById sudah siap)
         $newMessageData = getMessageById($newMessageId);
 
-        // 8. Kirim data lengkap itu kembali ke JavaScript sebagai JSON
+        // 9. Kirim data lengkap itu kembali ke JavaScript sebagai JSON
         header('Content-Type: application/json');
         echo json_encode($newMessageData);
         exit();
     }
     
-    // Jika gagal (misal $newMessageId = false)
     header('Content-Type: application/json');
-    http_response_code(500); // Internal Server Error
+    http_response_code(500); 
     echo json_encode(['error' => 'Gagal menyimpan pesan ke database']);
     exit();
 }
@@ -201,6 +198,83 @@ function checkNewMessages() {
     header('Content-Type: application/json');
     echo json_encode([]);
     exit;
+}
+
+/**
+ * Menghapus pesan (dipanggil oleh AJAX).
+ */
+function deleteMessageController() {
+    // 1. Pastikan session aktif untuk cek user
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    // 2. Validasi Keamanan:
+    // - Harus request POST
+    // - User harus login
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_SESSION['user_id'])) {
+        header('Content-Type: application/json');
+        http_response_code(403); // Forbidden
+        echo json_encode(['error' => 'Akses ditolak']);
+        exit();
+    }
+
+    // 3. Ambil data JSON yang dikirim oleh fetch()
+    // Ini BUKAN dari $_POST, tapi dari "body" request
+    $data = json_decode(file_get_contents('php://input'), true);
+    
+    // Ambil ID pesan dari data JSON itu
+    $message_id = $data['message_id'] ?? 0;
+    // Ambil ID user yang sedang login (untuk keamanan)
+    $user_id = (int)$_SESSION['user_id'];
+
+    if (empty($message_id)) {
+        header('Content-Type: application/json');
+        http_response_code(400); // Bad Request
+        echo json_encode(['error' => 'Message ID tidak valid']);
+        exit();
+    }
+
+    // 4. Panggil Model (Fungsi ini akan kita buat di langkah terakhir)
+    // Kita kirim KEDUA ID agar Model bisa cek "apakah user ini pemilik pesan?")
+    $success = deleteMessage($message_id, $user_id);
+    
+    // 5. Kirim balasan ke JavaScript
+    header('Content-Type: application/json');
+    if ($success) {
+        // Jika model bilang sukses
+        echo json_encode(['success' => true]);
+    } else {
+        // Jika model bilang gagal (misal: bukan pemilik pesan)
+        http_response_code(500); 
+        echo json_encode(['error' => 'Gagal menghapus pesan atau Anda tidak punya izin.']);
+    }
+    exit();
+}
+
+/**
+ * Endpoint API untuk sidebar poller.
+ * Hanya mengembalikan data JSON.
+ */
+function getSidebarUpdates() {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    $forums = [];
+    if (isset($_SESSION['user_id'])) {
+        // Panggil fungsi model kita yang sudah canggih
+        $forums = getForumsByUserId((int)$_SESSION['user_id']);
+    }
+
+    // Matikan error reporting agar tidak merusak JSON
+    error_reporting(0); 
+    ini_set('display_errors', 0);
+
+    // Kirim sebagai JSON
+    header('Content-Type: application/json');
+    echo json_encode($forums);
+    exit(); // Wajib ada exit()
 }
 
 ?>

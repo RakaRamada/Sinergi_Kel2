@@ -4,11 +4,11 @@
 $user_avatar = $_SESSION['avatar_url'] ?? '/Sinergi/public/assets/images/default_avatar.png'; 
 ?>
 
+
 <main class="col-span-6 border-r border-gray-200">
     <?php
     $current_view = $_GET['view'] ?? 'teman';
     ?>
-
     <div class="flex border-b border-gray-200 sticky top-0 bg-white/80 backdrop-blur-sm z-10">
         <a href="index.php?page=dashboard&view=teman"
             class="flex-1 text-center py-3 font-semibold hover:bg-gray-100 <?php if ($current_view === 'teman') echo 'border-b-2 border-black text-black'; else echo 'text-gray-500'; ?>">

@@ -1,99 +1,96 @@
 <?php
-// File: app/controllers/AuthController.php (VERSI PERBAIKAN FINAL)
+// File: app/controllers/AuthController.php (FINAL FIXED)
 
-// Panggil semua yang dibutuhkan
 require_once __DIR__ . '/../models/UserModel.php'; 
 
-// Untuk PHPMailer
+// Load PHPMailer
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 require_once __DIR__ . '/../../vendor/autoload.php'; 
 
-// Mulai sesi (Pastikan sudah ada di index.php, tapi jaga-jaga)
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
 
 // =====================================
 // FUNGSI LOGIN
 // =====================================
 
-/**
- * Menampilkan halaman Login.
- */
 function showLogin() {
-    // Pesan error dari proses login/register sebelumnya
     $pesan = $_SESSION['error_message'] ?? '';
-    unset($_SESSION['error_message']); // Hapus pesan setelah ditampilkan
-    
-    // Path view disesuaikan: app/views/login.php
+    unset($_SESSION['error_message']);
     require_once 'app/views/login.php'; 
 }
 
-/**
- * Memproses data dari form login (Menggunakan Email).
- */
 function doLogin() {
+    // 1. INISIALISASI VARIABEL DI AWAL (Mencegah Undefined Variable)
+    $email = trim($_POST['email'] ?? '');
+    $password_input = $_POST['password'] ?? '';
+    $captcha_input = $_POST['captcha_code'] ?? '';
+    $captcha_session = $_SESSION["code"] ?? '';
 
-    if (!isset($_POST['captcha_code']) || empty($_POST['captcha_code'])) {
+    // 2. Cek CAPTCHA
+    if (empty($captcha_input)) {
         $_SESSION['error_message'] = "CAPTCHA tidak boleh kosong!";
         header("Location: index.php?page=login");
         exit(); 
+    }
     
-    } else if (!isset($_SESSION["code"]) || $_SESSION["code"] != $_POST['captcha_code']) {
-        $_SESSION['error_message'] = "Kode CAPTCHA Anda salah!";
+    if ($captcha_session != $captcha_input) {
+        $_SESSION['error_message'] = "Kode CAPTCHA salah!";
         header("Location: index.php?page=login");
         exit();
     }
     
-    // 1. Ambil data dari form
-    $email = trim($_POST['email'] ?? '');
-    $password_input = $_POST['password'] ?? ''; 
-
+    // 3. Validasi Input Kosong
     if (empty($email) || empty($password_input)) {
         $_SESSION['error_message'] = "Email dan password wajib diisi!";
         header("Location: index.php?page=login");
         exit(); 
     }
 
-    // 2. Panggil Model untuk mencari user berdasarkan EMAIL
+    // 4. Cari User di Database
     $user_data = getUserByEmail($email); 
     
-    if ($user_data) {
-        // 3. Verifikasi password
-        // === PERBAIKAN NAMA KOLOM DI SINI ===
-        if (password_verify($password_input, $user_data['password'])) { // Ganti dari 'password_hash'
+    // 5. Cek Password
+    // Pastikan $user_data TIDAK NULL sebelum akses array-nya
+    if ($user_data && isset($user_data['password']) && password_verify($password_input, $user_data['password'])) {
             
-            // 4. Cek status verifikasi
-            // === PERBAIKAN NAMA KOLOM DI SINI ===
-            if ((int)($user_data['is_verif'] ?? 0) === 1) { // Ganti dari 'is_verified'
-                // Login Berhasil
-                // 5. Sukses! Simpan info user ke session
-                $_SESSION['user_id'] = $user_data['user_id'];
-                $_SESSION['nama_lengkap'] = $user_data['nama_lengkap'];
-                $_SESSION['role_name'] = $user_data['role_name']; 
-                $_SESSION['username'] = $user_data['username'];
-                
-                // 6. Arahkan ke halaman utama aplikasi
-                header("Location: index.php?page=dashboard");
-                exit; 
+        $is_verif = $user_data['is_verif'] ?? 0; 
+
+        if ((int)$is_verif === 1) {
+            // --- LOGIN SUKSES ---
+            $_SESSION['user_id']      = $user_data['user_id'];
+            $_SESSION['nama_lengkap'] = $user_data['nama_lengkap'];
+            $_SESSION['username']     = $user_data['username'];
+            $_SESSION['role_name']    = $user_data['role_name'] ?? 'Mahasiswa'; 
+            $_SESSION['role_id']      = $user_data['role_id']; // PENTING
+
+            $_SESSION['avatar_url']   = !empty($user_data['avatar_url']) 
+                                        ? $user_data['avatar_url'] 
+                                        : '/Sinergi/public/assets/images/default_avatar.png';
+
+            // Redirect sesuai Role
+            if ($user_data['role_id'] == 5) {
+                header("Location: index.php?page=admin-dashboard");
             } else {
-                $_SESSION['error_message'] = "Verifikasi akun anda terlebih dahulu! Cek email Anda.";
+                header("Location: index.php?page=dashboard");
             }
+            exit(); 
+
         } else {
-            $_SESSION['error_message'] = "Email atau Password salah!";
+            $_SESSION['error_message'] = "Akun belum diverifikasi. Cek email Anda.";
+            header("Location: index.php?page=login");
+            exit();
         }
     } else {
+        // Gagal Login
         $_SESSION['error_message'] = "Email atau Password salah!";
+        header("Location: index.php?page=login");
+        exit();
     }
-
-    // Jika sampai sini, login gagal.
-    header("Location: index.php?page=login");
-    exit();
 }
-
 
 // =====================================
 // FUNGSI LOGOUT
@@ -106,30 +103,22 @@ function logout() {
     exit();
 }
 
-
 // =====================================
 // FUNGSI REGISTRASI
 // =====================================
 
-/**
- * Menampilkan halaman Registrasi.
- */
 function showRegister() {
     $pesan = $_GET['pesan'] ?? '';
     require_once 'app/views/register.php';
 }
 
-/**
- * Memproses registrasi pengguna baru.
- */
 function doRegister() {
     $username = trim($_POST['username'] ?? '');
     $nama_lengkap = trim($_POST['nama_lengkap'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $password_input = $_POST['password'] ?? '';
-    $role = $_POST['role'] ?? '3';
+    $role = $_POST['role'] ?? '1'; 
     
-    // Validasi dasar
     if (empty($username) || empty($nama_lengkap) || empty($email) || empty($password_input)) {
         $pesan = "Semua field wajib diisi!";
         header("Location: index.php?page=register&pesan=" . urlencode($pesan));
@@ -141,35 +130,24 @@ function doRegister() {
     
     $result = createUser($username, $nama_lengkap, $email, $password_hash, $role, $token);
 
-    // 4️⃣ Tangani hasil dari model (LEBIH SPESIFIK)
     if ($result === 'email_exists') {
-        $pesan = "Email ini sudah terdaftar. Silakan gunakan email lain atau login.";
+        $pesan = "Email sudah terdaftar.";
         header("Location: index.php?page=register&pesan=" . urlencode($pesan));
         exit();
-
     } elseif ($result === 'username_exists') {
-        $pesan = "Username ini sudah digunakan. Silakan pilih username unik lain.";
+        $pesan = "Username sudah digunakan.";
         header("Location: index.php?page=register&pesan=" . urlencode($pesan));
         exit();
-
-    } elseif ($result === 'db_error') {
-        // Ini adalah error yang Anda lihat di screenshot
-        $pesan = "Gagal menyimpan data ke database. Coba lagi nanti.";
-        header("Location: index.php?page=register&pesan=" . urlencode($pesan));
-        exit();
-
     } elseif ($result !== 'success') {
-        $pesan = "Terjadi kesalahan tidak diketahui.";
+        $pesan = "Gagal registrasi database.";
         header("Location: index.php?page=register&pesan=" . urlencode($pesan));
         exit();
     }
 
-    // 5️⃣ Kirim email verifikasi jika berhasil
+    // Kirim Email
     $verifLink = "http://localhost/sinergi/index.php?page=verify&code=" . $token;
-
     $mail = new PHPMailer(true);
     try {
-        // SMTP Setup
         $mail->isSMTP();
         $mail->Host       = 'smtp.gmail.com';
         $mail->SMTPAuth   = true;
@@ -178,40 +156,19 @@ function doRegister() {
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
         $mail->Port       = 465;
 
-        // Email pengirim & penerima
         $mail->setFrom('sinergi.tik24@gmail.com', 'PBL SINERGI');
         $mail->addAddress($email, $nama_lengkap);
-
-        $buttonStyle = "display:inline-block;padding:12px 24px;font-family:Arial,sans-serif;
-                        font-size:16px;font-weight:600;color:#fff;background-color:#3b82f6;
-                        border-radius:8px;text-decoration:none;";
-
         $mail->isHTML(true);
         $mail->Subject = 'Aktivasi Akun SINERGI Anda';
-        $mail->Body = "
-            <div style='font-family: Arial, sans-serif; line-height: 1.6;'>
-                Hai $nama_lengkap,<br><br>
-                Terima kasih sudah mendaftar di platform SINERGI.<br>
-                Silakan klik tombol di bawah ini untuk memverifikasi akun kamu:<br><br>
-                <a href='{$verifLink}' style='{$buttonStyle}'>Verifikasi Akun Anda</a>
-                <br><br>
-                Jika Anda tidak mendaftar, abaikan email ini.<br><br>
-                Salam,<br>Tim PBL SINERGI
-            </div>
-        ";
-        $mail->AltBody = "Halo {$nama_lengkap},\n\nSilakan salin dan tempel link berikut untuk aktivasi:\n{$verifLink}\n\nSalam,\nTim SINERGI";
+        $mail->Body = "Klik <a href='{$verifLink}'>disini</a> untuk verifikasi.";
 
         $mail->send();
-
-        $_SESSION['error_message'] = "Registrasi berhasil! Silakan cek email kamu untuk verifikasi akun.";
+        $_SESSION['error_message'] = "Registrasi berhasil! Cek email untuk verifikasi.";
         header("Location: index.php?page=login");
-        exit();
-
     } catch (Exception $e) {
-        error_log("PHPMailer Error: " . $mail->ErrorInfo);
-        $_SESSION['error_message'] = "Registrasi berhasil, tapi gagal kirim email verifikasi. Error: {$mail->ErrorInfo}";
+        $_SESSION['error_message'] = "Registrasi sukses, tapi gagal kirim email.";
         header("Location: index.php?page=login");
-        exit();
     }
+    exit();
 }
 ?>
