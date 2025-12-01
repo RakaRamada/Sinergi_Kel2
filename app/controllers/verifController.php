@@ -2,124 +2,140 @@
 // File: app/controllers/verifController.php
 
 require_once __DIR__ . '/../models/UserModel.php';
+require_once __DIR__ . '/../../config/koneksi.php'; // Diperlukan untuk logika manual fallback
 
 /**
- * Fungsi utama untuk memverifikasi akun berdasarkan kode/token
+ * Class VerifController
+ * Menangani proses verifikasi akun email.
  */
-function verify_email() {
+class VerifController
+{
+    private $conn;
 
-    // Pastikan session aktif
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
+    public function __construct($conn)
+    {
+        $this->conn = $conn;
     }
 
-    // Cek apakah ada 'code' di URL
-    if (isset($_GET['code'])) {
-        $token = $_GET['code'];
+    /**
+     * Metode utama untuk memverifikasi akun berdasarkan kode/token
+     */
+    public function verifyEmail()
+    {
+        // Pastikan session aktif
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
 
-        // Coba pakai fungsi dari Model (versi Rifky)
-        if (function_exists('verifyUserByToken')) {
-            $result = verifyUserByToken($token);
-        } else {
-            // Jika model belum ada, gunakan logika manual (versi Raka)
-            require_once __DIR__ . '/../../config/koneksi.php';
+        // Cek apakah ada 'code' di URL
+        if (isset($_GET['code'])) {
+            $token = $_GET['code'];
 
-            $sql_select = "SELECT * FROM users WHERE verifikasi_kode = :code";
-            $stmt_select = oci_parse($conn, $sql_select);
-            oci_bind_by_name($stmt_select, ":code", $token);
-            oci_execute($stmt_select);
-            $user = oci_fetch_assoc($stmt_select);
-
-            if ($user) {
-                if ($user['IS_VERIF'] == 1) {
-                    $result = 'already_verified';
-                } else {
-                    $sql_update = "UPDATE users SET is_verif = 1 WHERE verifikasi_kode = :code";
-                    $stmt_update = oci_parse($conn, $sql_update);
-                    oci_bind_by_name($stmt_update, ":code", $token);
-                    if (oci_execute($stmt_update)) {
-                        $result = 'success';
-                    } else {
-                        $result = 'db_error';
-                    }
-                    oci_free_statement($stmt_update);
-                }
+            // Coba pakai fungsi dari Model (versi Rifky)
+            if (function_exists('verifyUserByToken')) {
+                // Asumsi fungsi model sudah diupdate untuk menerima $conn
+                $result = verifyUserByToken($token, $this->conn);
             } else {
-                $result = 'invalid_or_expired';
+                // Jika model belum ada, gunakan logika manual
+                global $conn; // Menggunakan koneksi global jika koneksi di luar class tidak diinject
+
+                $sql_select = "SELECT * FROM users WHERE verifikasi_kode = :code";
+                $stmt_select = oci_parse($conn, $sql_select);
+                oci_bind_by_name($stmt_select, ":code", $token);
+                oci_execute($stmt_select);
+                $user = oci_fetch_assoc($stmt_select);
+
+                if ($user) {
+                    if ($user['IS_VERIF'] == 1) {
+                        $result = 'already_verified';
+                    } else {
+                        $sql_update = "UPDATE users SET is_verif = 1 WHERE verifikasi_kode = :code";
+                        $stmt_update = oci_parse($conn, $sql_update);
+                        oci_bind_by_name($stmt_update, ":code", $token);
+                        if (oci_execute($stmt_update)) {
+                            $result = 'success';
+                        } else {
+                            $result = 'db_error';
+                        }
+                        oci_free_statement($stmt_update);
+                    }
+                } else {
+                    $result = 'invalid_or_expired';
+                }
+
+                oci_free_statement($stmt_select);
+                // Catatan: oci_close($conn) dihilangkan agar koneksi tetap terbuka untuk bagian lain dari index.php
             }
 
-            oci_free_statement($stmt_select);
-            oci_close($conn);
+            // --- Hasil Akhir Verifikasi ---
+            switch ($result) {
+                case 'success':
+                    $this->tampilkanPesan(
+                        'Verifikasi Berhasil!',
+                        'Akun Anda telah berhasil diverifikasi. Silakan login.',
+                        'sukses'
+                    );
+                    break;
+
+                case 'already_verified':
+                    $this->tampilkanPesan(
+                        'Sudah Diverifikasi',
+                        'Akun ini sudah pernah diverifikasi sebelumnya.',
+                        'info'
+                    );
+                    break;
+
+                case 'invalid_or_expired':
+                    $this->tampilkanPesan(
+                        'Kode Tidak Valid',
+                        'Kode verifikasi ini tidak valid, sudah kedaluwarsa, atau tidak ditemukan.',
+                        'gagal'
+                    );
+                    break;
+
+                case 'db_error':
+                    $this->tampilkanPesan(
+                        'Terjadi Kesalahan',
+                        'Verifikasi gagal karena kesalahan sistem. Coba lagi nanti.',
+                        'gagal'
+                    );
+                    break;
+
+                default:
+                    $this->tampilkanPesan(
+                        'Verifikasi Gagal',
+                        'Terjadi kesalahan tak terduga.',
+                        'gagal'
+                    );
+                    break;
+            }
+
+        } else {
+            $this->tampilkanPesan(
+                'Link Error',
+                'Link verifikasi tidak lengkap atau salah.',
+                'gagal'
+            );
         }
-
-        // --- Hasil Akhir Verifikasi ---
-        switch ($result) {
-            case 'success':
-                tampilkan_pesan(
-                    'Verifikasi Berhasil!',
-                    'Akun Anda telah berhasil diverifikasi. Silakan login.',
-                    'sukses'
-                );
-                break;
-
-            case 'already_verified':
-                tampilkan_pesan(
-                    'Sudah Diverifikasi',
-                    'Akun ini sudah pernah diverifikasi sebelumnya.',
-                    'info'
-                );
-                break;
-
-            case 'invalid_or_expired':
-                tampilkan_pesan(
-                    'Kode Tidak Valid',
-                    'Kode verifikasi ini tidak valid, sudah kedaluwarsa, atau tidak ditemukan.',
-                    'gagal'
-                );
-                break;
-
-            case 'db_error':
-                tampilkan_pesan(
-                    'Terjadi Kesalahan',
-                    'Verifikasi gagal karena kesalahan sistem. Coba lagi nanti.',
-                    'gagal'
-                );
-                break;
-
-            default:
-                tampilkan_pesan(
-                    'Verifikasi Gagal',
-                    'Terjadi kesalahan tak terduga.',
-                    'gagal'
-                );
-                break;
-        }
-
-    } else {
-        tampilkan_pesan(
-            'Link Error',
-            'Link verifikasi tidak lengkap atau salah.',
-            'gagal'
-        );
-    }
-}
-
-/**
- * Fungsi untuk menampilkan halaman status verifikasi (versi Rifky)
- */
-function tampilkan_pesan($judul, $pesan, $status = 'info') {
-    $logo_path = 'public/assets/images/logo.png';
-
-    $icon_svg = '';
-    if ($status == 'sukses') {
-        $icon_svg = '<svg width="64" height="64" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#28a745"/></svg>';
-    } elseif ($status == 'gagal') {
-        $icon_svg = '<svg width="64" height="64" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="#dc3545"/></svg>';
-    } else {
-        $icon_svg = '<svg width="64" height="64" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="#007bff"/></svg>';
     }
 
-    echo <<<HTML
+    /**
+     * Metode untuk menampilkan halaman status verifikasi (dipindahkan ke dalam class)
+     */
+    private function tampilkanPesan($judul, $pesan, $status = 'info')
+    {
+        $logo_path = 'public/assets/images/logo.png';
+
+        $icon_svg = '';
+        if ($status == 'sukses') {
+            $icon_svg = '<svg width="64" height="64" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#28a745"/></svg>';
+        } elseif ($status == 'gagal') {
+            $icon_svg = '<svg width="64" height="64" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="#dc3545"/></svg>';
+        } else {
+            $icon_svg = '<svg width="64" height="64" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="#007bff"/></svg>';
+        }
+
+        echo <<<HTML
     <!DOCTYPE html>
     <html lang="id">
     <head>
@@ -154,6 +170,7 @@ function tampilkan_pesan($judul, $pesan, $status = 'info') {
     </body>
     </html>
 HTML;
-    exit();
+        exit();
+    }
 }
 ?>

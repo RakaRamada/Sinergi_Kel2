@@ -69,11 +69,15 @@ $user_avatar = $_SESSION['avatar_url'] ?? '/Sinergi/public/assets/images/default
 
 <?php 
 // Sidebar Kanan
+<<<<<<< HEAD
 if (($_GET['view'] ?? 'teman') === 'komunitas') {
     require 'app/views/partials/sidebar_komunitas.php';
 } else {
     require 'app/views/partials/sidebar_teman.php';
 }
+=======
+require __DIR__ . '/partials/sidebar_kanan.php';
+>>>>>>> origin/raka
 
 // Footer & Script JS (postingan.php yang berisi logika AJAX tadi)
 require 'app/views/partials/postingan.php'; 

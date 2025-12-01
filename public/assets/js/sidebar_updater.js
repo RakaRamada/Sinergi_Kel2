@@ -155,7 +155,6 @@ function escapeHTML(str) {
     }[m];
   });
 }
-
 document.addEventListener("DOMContentLoaded", function () {
   pollSidebar();
 });
