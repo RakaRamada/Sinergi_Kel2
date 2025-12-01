@@ -14,7 +14,7 @@ class PostModel {
 
     // 1. Ambil Semua Postingan (Untuk Feed)
     public function getAllPosts($currentUserId) {
-        // PERBAIKAN: Gunakan bind dengan variable yang lebih jelas
+        // UPDATE: Menambahkan r.role_name dan JOIN ke tabel roles
         $sql = "
             SELECT 
                 p.post_id AS POST_ID,    
@@ -27,11 +27,13 @@ class PostModel {
                 u.username AS USERNAME,
                 u.nama_lengkap AS NAMA_LENGKAP,
                 u.avatar_url AS AVATAR_URL,
+                r.role_name AS ROLE_NAME,
                 (SELECT COUNT(*) 
                  FROM likes l 
                  WHERE l.post_id = p.post_id AND l.user_id = :current_user_id) AS USER_SUDAH_LIKE
             FROM postingan p
             JOIN users u ON p.user_id = u.user_id
+            LEFT JOIN roles r ON u.role_id = r.role_id
             ORDER BY p.post_id DESC
         ";
 
@@ -42,7 +44,6 @@ class PostModel {
             throw new Exception("Parse Error: " . $e['message']);
         }
         
-        // Bind dengan variable lokal
         $bind_user_id = $currentUserId;
         oci_bind_by_name($stmt, ':current_user_id', $bind_user_id);
         
@@ -61,6 +62,7 @@ class PostModel {
 
     // 2. Ambil Satu Postingan (Untuk Detail)
     public function getPostById($postId) {
+        // UPDATE: Menambahkan role_name juga disini untuk konsistensi
         $sql = "
             SELECT 
                 p.post_id, 
@@ -72,9 +74,11 @@ class PostModel {
                 p.comment_count,
                 u.username, 
                 u.nama_lengkap, 
-                u.avatar_url
+                u.avatar_url,
+                r.role_name
             FROM postingan p
             JOIN users u ON p.user_id = u.user_id
+            LEFT JOIN roles r ON u.role_id = r.role_id
             WHERE p.post_id = :post_id
         ";
         
@@ -131,42 +135,51 @@ class PostModel {
     }
 
     // 4. Hapus Postingan
-    public function deletePost($postId, $userId) {
-        // Cek data dulu
-        $sql_cek = "SELECT USER_ID, POST_IMAGE FROM postingan WHERE POST_ID = :post_id";
-        $stmt_cek = oci_parse($this->conn, $sql_cek);
-        
-        $bind_post_id = $postId;
-        oci_bind_by_name($stmt_cek, ':post_id', $bind_post_id);
-        oci_execute($stmt_cek);
-        $row = oci_fetch_assoc($stmt_cek);
-        oci_free_statement($stmt_cek);
+    public function deletePost($post_id, $user_id) {
+        try {
+            // Konversi ke int agar aman
+            $pid_clean = intval($post_id);
+            $uid_clean = intval($user_id);
 
-        if (!$row) return ['status' => false, 'message' => 'Postingan tidak ditemukan'];
-        if ($row['USER_ID'] != $userId) return ['status' => false, 'message' => 'Bukan milik Anda'];
+            // Ambil data postingan dulu untuk dapatkan image_path
+            $sql_get = "SELECT POST_IMAGE FROM postingan WHERE post_id = :pid AND user_id = :uid";
+            $stmt_get = oci_parse($this->conn, $sql_get);
+            oci_bind_by_name($stmt_get, ':pid', $pid_clean);
+            oci_bind_by_name($stmt_get, ':uid', $uid_clean);
+            oci_execute($stmt_get);
+            $row = oci_fetch_assoc($stmt_get);
+            oci_free_statement($stmt_get);
 
-        // Hapus Data
-        $sql_del = "DELETE FROM postingan WHERE POST_ID = :post_id";
-        $stmt_del = oci_parse($this->conn, $sql_del);
-        
-        $bind_post_id2 = $postId;
-        oci_bind_by_name($stmt_del, ':post_id', $bind_post_id2);
-        
-        if (!oci_execute($stmt_del, OCI_COMMIT_ON_SUCCESS)) {
-            $e = oci_error($stmt_del);
-            if ($e['code'] == 2292) return ['status' => false, 'message' => 'Gagal: Hapus komentar dulu'];
-            return ['status' => false, 'message' => $e['message']];
+            if (!$row) {
+                return ['status' => false, 'message' => 'Postingan tidak ditemukan atau bukan milik Anda.'];
+            }
+
+            $image_path = $row['POST_IMAGE'] ?? null;
+
+            // Hapus dari database
+            $sql_del = "DELETE FROM postingan WHERE post_id = :pid AND user_id = :uid";
+            $stmt_del = oci_parse($this->conn, $sql_del);
+            oci_bind_by_name($stmt_del, ':pid', $pid_clean);
+            oci_bind_by_name($stmt_del, ':uid', $uid_clean);
+
+            if (oci_execute($stmt_del, OCI_COMMIT_ON_SUCCESS)) {
+                oci_free_statement($stmt_del);
+                return ['status' => true, 'image_path' => $image_path];
+            } else {
+                $e = oci_error($stmt_del);
+                oci_free_statement($stmt_del);
+                return ['status' => false, 'message' => 'Gagal hapus dari DB: ' . $e['message']];
+            }
+
+        } catch (Exception $e) {
+            return ['status' => false, 'message' => 'Error: ' . $e->getMessage()];
         }
-        oci_free_statement($stmt_del);
-
-        return ['status' => true, 'image_path' => $row['POST_IMAGE'], 'message' => 'Berhasil'];
     }
 
     // ==========================================================
     // BAGIAN: LIKE
     // ==========================================================
     public function toggleLike($userId, $postId) {
-        // Cek Like
         $sql_check = "SELECT COUNT(*) AS TOTAL FROM likes WHERE user_id = :user_id AND post_id = :post_id";
         $stmt_check = oci_parse($this->conn, $sql_check);
         
@@ -190,25 +203,17 @@ class PostModel {
             $action = 'liked';
         }
 
-        // Eksekusi Action
         $stmt_act = oci_parse($this->conn, $sql_act);
-        
-        $bind_user_id2 = $userId;
-        $bind_post_id2 = $postId;
-        
-        oci_bind_by_name($stmt_act, ':user_id', $bind_user_id2);
-        oci_bind_by_name($stmt_act, ':post_id', $bind_post_id2);
+        oci_bind_by_name($stmt_act, ':user_id', $bind_user_id);
+        oci_bind_by_name($stmt_act, ':post_id', $bind_post_id);
         
         if(!oci_execute($stmt_act, OCI_NO_AUTO_COMMIT)) {
             oci_rollback($this->conn);
             return false;
         }
 
-        // Eksekusi Update Count
         $stmt_upd = oci_parse($this->conn, $sql_upd);
-        
-        $bind_post_id3 = $postId;
-        oci_bind_by_name($stmt_upd, ':post_id', $bind_post_id3);
+        oci_bind_by_name($stmt_upd, ':post_id', $bind_post_id);
         
         if(!oci_execute($stmt_upd, OCI_NO_AUTO_COMMIT)) {
             oci_rollback($this->conn);
@@ -219,12 +224,9 @@ class PostModel {
         oci_free_statement($stmt_act);
         oci_free_statement($stmt_upd);
 
-        // Ambil Count Terbaru
         $sql_cnt = "SELECT like_count FROM postingan WHERE post_id = :post_id";
         $stmt_cnt = oci_parse($this->conn, $sql_cnt);
-        
-        $bind_post_id4 = $postId;
-        oci_bind_by_name($stmt_cnt, ':post_id', $bind_post_id4);
+        oci_bind_by_name($stmt_cnt, ':post_id', $bind_post_id);
         oci_execute($stmt_cnt);
         $rCount = oci_fetch_assoc($stmt_cnt);
         oci_free_statement($stmt_cnt);
@@ -236,89 +238,34 @@ class PostModel {
     // BAGIAN: KOMENTAR
     // ==========================================================
     
-    // 1. Ambil Komentar Parent
     public function getParentComments($postId) {
-        $sql = "SELECT 
-                    c.comment_id,
-                    c.post_id,
-                    c.user_id,
-                    c.isi_komen,
-                    c.parent_comment_id,
-                    TO_CHAR(c.created_at, 'YYYY-MM-DD HH24:MI:SS') as WAKTU_FIX,
-                    u.username, 
-                    u.nama_lengkap, 
-                    u.avatar_url,
-                    (SELECT COUNT(*) FROM comments WHERE parent_comment_id = c.comment_id) as reply_count
-                FROM comments c 
-                JOIN users u ON c.user_id = u.user_id
-                WHERE c.post_id = :post_id AND c.parent_comment_id IS NULL 
-                ORDER BY c.created_at DESC";
-        
+        $sql = "SELECT c.*, u.username, u.nama_lengkap, u.avatar_url,
+                (SELECT COUNT(*) FROM comments WHERE parent_comment_id = c.comment_id) as reply_count
+                FROM comments c JOIN users u ON c.user_id = u.user_id
+                WHERE c.post_id = :post_id AND c.parent_comment_id IS NULL ORDER BY c.created_at DESC";
         $stmt = oci_parse($this->conn, $sql);
-        
-        $bind_post_id = $postId;
-        oci_bind_by_name($stmt, ':post_id', $bind_post_id);
-        
-        if (!oci_execute($stmt)) {
-            $e = oci_error($stmt);
-            throw new Exception("Execute Error getParentComments: " . $e['message']);
-        }
-        
+        oci_bind_by_name($stmt, ':post_id', $postId);
+        oci_execute($stmt);
         $res = [];
-        while($r = oci_fetch_assoc($stmt)) { 
-            $res[] = array_change_key_case($r, CASE_UPPER); 
-        }
+        while($r = oci_fetch_assoc($stmt)) { $res[] = array_change_key_case($r, CASE_UPPER); }
         oci_free_statement($stmt);
         return $res;
     }
 
-    // 2. Ambil Replies
     public function getReplies($parentCommentId) {
-        $sql = "SELECT 
-                    c.comment_id,
-                    c.post_id,
-                    c.user_id,
-                    c.isi_komen,
-                    c.parent_comment_id,
-                    TO_CHAR(c.created_at, 'YYYY-MM-DD HH24:MI:SS') as WAKTU_FIX,
-                    u.username, 
-                    u.nama_lengkap, 
-                    u.avatar_url
-                FROM comments c 
-                JOIN users u ON c.user_id = u.user_id
-                WHERE c.parent_comment_id = :parent_id 
-                ORDER BY c.created_at ASC";
-        
+        $sql = "SELECT c.*, u.username, u.nama_lengkap, u.avatar_url
+                FROM comments c JOIN users u ON c.user_id = u.user_id
+                WHERE c.parent_comment_id = :parent_id ORDER BY c.created_at ASC";
         $stmt = oci_parse($this->conn, $sql);
-        
-        $bind_parent_id = $parentCommentId;
-        oci_bind_by_name($stmt, ':parent_id', $bind_parent_id);
-        
-        if (!oci_execute($stmt)) {
-            $e = oci_error($stmt);
-            throw new Exception("Execute Error getReplies: " . $e['message']);
-        }
-        
+        oci_bind_by_name($stmt, ':parent_id', $parentCommentId);
+        oci_execute($stmt);
         $res = [];
-        while($r = oci_fetch_assoc($stmt)) { 
-            $res[] = array_change_key_case($r, CASE_UPPER); 
-        }
+        while($r = oci_fetch_assoc($stmt)) { $res[] = array_change_key_case($r, CASE_UPPER); }
         oci_free_statement($stmt);
         return $res;
     }
 
-    // 3. Ambil Komentar (Generic)
-    public function getComments($postId, $parentId = null) {
-        if ($parentId === null) {
-            return $this->getParentComments($postId);
-        } else {
-            return $this->getReplies($parentId);
-        }
-    }
-
-    // 4. Tambah Komentar
     public function addComment($userId, $postId, $content, $parentId = null) {
-        // Generate ID Manual
         $sql_id = "SELECT NVL(MAX(comment_id), 0) + 1 as next_id FROM comments";
         $stmt_id = oci_parse($this->conn, $sql_id);
         oci_execute($stmt_id);
@@ -328,85 +275,21 @@ class PostModel {
 
         $sql = "INSERT INTO comments (comment_id, post_id, user_id, isi_komen, parent_comment_id, created_at) 
                 VALUES (:comment_id, :post_id, :user_id, :isi_komen, :parent_id, SYSTIMESTAMP)";
-        
         $stmt = oci_parse($this->conn, $sql);
-        
-        $bind_cid = $newId;
-        $bind_pid = $postId;
-        $bind_uid = $userId;
-        $bind_isi = $content;
-        $bind_parent = $parentId;
-        
-        oci_bind_by_name($stmt, ':comment_id', $bind_cid);
-        oci_bind_by_name($stmt, ':post_id', $bind_pid);
-        oci_bind_by_name($stmt, ':user_id', $bind_uid);
-        oci_bind_by_name($stmt, ':isi_komen', $bind_isi);
-        oci_bind_by_name($stmt, ':parent_id', $bind_parent);
+        oci_bind_by_name($stmt, ':comment_id', $newId);
+        oci_bind_by_name($stmt, ':post_id', $postId);
+        oci_bind_by_name($stmt, ':user_id', $userId);
+        oci_bind_by_name($stmt, ':isi_komen', $content);
+        oci_bind_by_name($stmt, ':parent_id', $parentId);
+        if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) { oci_rollback($this->conn); return false; }
 
-        if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) {
-            oci_rollback($this->conn);
-            return false;
-        }
-
-        // Update Count di Postingan
         $sql_upd = "UPDATE postingan SET comment_count = comment_count + 1 WHERE post_id = :post_id";
         $stmt_upd = oci_parse($this->conn, $sql_upd);
-        
-        $bind_pid2 = $postId;
-        oci_bind_by_name($stmt_upd, ':post_id', $bind_pid2);
+        oci_bind_by_name($stmt_upd, ':post_id', $postId);
         oci_execute($stmt_upd, OCI_NO_AUTO_COMMIT);
         
         oci_commit($this->conn);
-        oci_free_statement($stmt);
-        oci_free_statement($stmt_upd);
-
         return $newId;
-    }
-
-    // 5. Hapus Komentar
-    public function deleteComment($commentId, $userId) {
-        // Cek Kepemilikan & Ambil PostID
-        $sql_cek = "SELECT POST_ID FROM comments WHERE COMMENT_ID = :comment_id AND USER_ID = :user_id";
-        $stmt_cek = oci_parse($this->conn, $sql_cek);
-        
-        $bind_cid = $commentId;
-        $bind_uid = $userId;
-        
-        oci_bind_by_name($stmt_cek, ':comment_id', $bind_cid);
-        oci_bind_by_name($stmt_cek, ':user_id', $bind_uid);
-        oci_execute($stmt_cek);
-        $row = oci_fetch_assoc($stmt_cek);
-        oci_free_statement($stmt_cek);
-
-        if (!$row) return false;
-
-        $postId = $row['POST_ID'];
-
-        // Hapus
-        $sql_del = "DELETE FROM comments WHERE COMMENT_ID = :comment_id";
-        $stmt_del = oci_parse($this->conn, $sql_del);
-        
-        $bind_cid2 = $commentId;
-        oci_bind_by_name($stmt_del, ':comment_id', $bind_cid2);
-        
-        if (!oci_execute($stmt_del, OCI_NO_AUTO_COMMIT)) {
-            oci_rollback($this->conn);
-            return false;
-        }
-
-        // Kurangi Count
-        $sql_dec = "UPDATE postingan SET comment_count = GREATEST(0, comment_count - 1) WHERE post_id = :post_id";
-        $stmt_dec = oci_parse($this->conn, $sql_dec);
-        
-        $bind_pid = $postId;
-        oci_bind_by_name($stmt_dec, ':post_id', $bind_pid);
-        oci_execute($stmt_dec, OCI_NO_AUTO_COMMIT);
-
-        oci_commit($this->conn);
-        oci_free_statement($stmt_del);
-        oci_free_statement($stmt_dec);
-        
-        return true;
     }
 }
 ?>

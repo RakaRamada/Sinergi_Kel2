@@ -37,12 +37,11 @@ class ProfileController {
         $profile_user_id = isset($_GET['id']) ? (int)$_GET['id'] : $current_user_id;
         $is_my_profile = ($profile_user_id === $current_user_id);
 
-        // Ambil data user
+        // PERBAIKAN DISINI: Menghapus u.followers dan u.following dari SELECT
         $sql = "
             SELECT 
                 u.user_id, u.username, u.nama_lengkap, u.email,
-                u.avatar_url, u.header_url, u.bio, u.followers,
-                u.following, u.nim, r.role_name,
+                u.avatar_url, u.header_url, u.bio, u.nim, r.role_name,
                 (SELECT COUNT(*) FROM postingan p WHERE p.user_id = u.user_id) AS total_postingan
             FROM users u
             LEFT JOIN roles r ON u.role_id = r.role_id
@@ -70,14 +69,16 @@ class ProfileController {
         // Fix keys and defaults
         $profile_data['AVATAR_URL_FIXED'] = !empty($profile_data['AVATAR_URL']) 
             ? $profile_data['AVATAR_URL'] 
-            : $this->defaultAvatar; // Gunakan $this->defaultAvatar
+            : $this->defaultAvatar; 
 
         $profile_data['HEADER_URL_FIXED'] = !empty($profile_data['HEADER_URL']) 
             ? $profile_data['HEADER_URL'] 
-            : $this->defaultHeader; // Gunakan $this->defaultHeader
+            : $this->defaultHeader; 
 
-        $profile_data['FOLLOWERS'] = isset($profile_data['FOLLOWERS']) ? (int)$profile_data['FOLLOWERS'] : 0;
-        $profile_data['FOLLOWING'] = isset($profile_data['FOLLOWING']) ? (int)$profile_data['FOLLOWING'] : 0;
+        // Set Followers/Following ke 0 karena kolom sudah dihapus
+        $profile_data['FOLLOWERS'] = 0;
+        $profile_data['FOLLOWING'] = 0;
+        
         $profile_data['BIO'] = isset($profile_data['BIO']) ? $profile_data['BIO'] : '';
         $profile_data['NIM'] = isset($profile_data['NIM']) ? $profile_data['NIM'] : '';
 
@@ -129,7 +130,6 @@ class ProfileController {
         oci_free_statement($stmt_posts);
 
         // Panggil View
-        // Variabel lokal ($profile_data, $user_posts, dll) otomatis terbaca di view karena require ada di dalam scope method ini
         require __DIR__ . '/../views/profile.php';
     }
 
@@ -242,7 +242,7 @@ class ProfileController {
         }
         oci_free_statement($stmt);
 
-        header("Location: index.php?page=profile&status=update_sukses");
+        header("Location: index.php?page=profile&status=update");
         exit;
     }
 }

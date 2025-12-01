@@ -1,30 +1,22 @@
 <?php
 // File: app/views/partials/postingan.php
 ?>
-
-</div> 
-</div> 
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     console.log("Sistem Postingan Siap!");
 
-    // ==================================================
-    // 1. INISIALISASI VARIABEL
-    // ==================================================
     const postFeedContainer = document.getElementById('post-feed-container');
     const createPostForm = document.getElementById('create-post-form');
     const submitButton = document.getElementById('submit-post-button');
     
-    // Variabel Gambar Preview
     const imageInput = document.getElementById('post-image-input');
     const imagePreviewContainer = document.getElementById('image-preview-container');
     const imagePreview = document.getElementById('image-preview');
     const removeImageBtn = document.getElementById('remove-image-btn');
 
-    // ==================================================
-    // 2. LOGIKA PREVIEW GAMBAR
-    // ==================================================
+    // CRITICAL: Ambil current user ID dari session
+    const currentUserId = <?php echo $_SESSION['user_id'] ?? 0; ?>;
+
     if (imageInput) {
         imageInput.addEventListener('change', function() {
             const file = this.files[0];
@@ -59,9 +51,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ==================================================
-    // 3. LOGIKA SUBMIT POSTINGAN
-    // ==================================================
     if (createPostForm) { 
         createPostForm.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -82,7 +71,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const formData = new FormData(this);
 
-            fetch('/Sinergi/api/upload_postingan.php', {
+            fetch('/Sinergi/index.php?page=post-api&method=createPost', {
                 method: 'POST',
                 body: formData
             })
@@ -111,15 +100,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ==================================================
-    // 4. FUNGSI LOAD POSTINGAN
-    // ==================================================
+//LOAD POSTINGAN
     function loadPosts() {
         if (!postFeedContainer) return; 
 
         postFeedContainer.innerHTML = '<div class="p-8 text-center text-gray-500"><div class="animate-pulse">Sedang memuat...</div></div>';
 
-        fetch('/Sinergi/api/ambil_postingan.php')
+        fetch('/Sinergi/index.php?page=post-api&method=getPostings')
             .then(response => {
                 if(!response.ok) throw new Error('Network response was not ok');
                 return response.json();
@@ -152,65 +139,83 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     const kontenText = post.KONTEN ? escapeHtml(post.KONTEN) : '';
 
+                    const isOwnPost = parseInt(post.USER_ID) === parseInt(currentUserId);
+                    
+                    // Button Report yang diletakkan sejajar dengan Like & Comment
+                    const reportButtonHTML = !isOwnPost ? `
+                        <button class="group flex items-center space-x-2 hover:text-green-500 transition-colors w-fit"
+                                onclick="event.stopPropagation(); openReportModal(${post.POST_ID})" title="Laporkan">
+                            <div class="p-2 rounded-full group-hover:bg-green-50 transition-colors">
+                                <img src="/Sinergi/public/assets/icons/report.svg" 
+                                     alt="Laporkan" 
+                                     class="w-5 h-5">
+                            </div>
+                        </button>
+                    ` : '';
+                    
+                    // UPDATE LAYOUT DISINI
                     const postHTML = `
-                        <div class="bg-white border-b border-gray-200 hover:bg-gray-50/30 transition-colors">
+                        <div class="bg-white border-b border-gray-200 hover:bg-gray-50/30 transition-colors cursor-pointer" onclick="window.location.href='index.php?page=post-detail&id=${post.POST_ID}'">
                             <div class="p-4">
                                 <div class="flex items-start space-x-3">
-                                    <div class="flex-shrink-0 cursor-pointer" onclick="window.location.href='index.php?page=profile&id=${post.USER_ID}'">
+                                    <!-- Avatar -->
+                                    <div class="flex-shrink-0 cursor-pointer" onclick="event.stopPropagation(); window.location.href='index.php?page=profile&id=${post.USER_ID}'">
                                          <img src="${escapeHtml(post.AVATAR_URL_FIXED)}" 
                                               alt="Avatar" 
                                               class="w-10 h-10 rounded-full object-cover bg-gray-200 border border-gray-100">
                                     </div>
                                     
                                     <div class="flex-1 min-w-0">
-                                        <div class="flex items-center space-x-1 mb-1">
+                                        <!-- Header: @Username (Bold) | Role (Gray) -->
+                                        <div class="flex items-center space-x-2 mb-1">
                                             <a href="index.php?page=profile&id=${post.USER_ID}" 
-                                               class="font-bold text-gray-900 hover:underline text-base">
-                                                ${escapeHtml(post.NAMA_LENGKAP)}
+                                               onclick="event.stopPropagation();"
+                                               class="font-bold text-gray-900 hover:underline text-[15px]">
+                                                @${escapeHtml(post.USERNAME)}
                                             </a>
-                                            <span class="text-gray-500 text-sm">@${escapeHtml(post.USERNAME)}</span>
-                                            <span class="text-gray-400 text-sm">·</span>
-                                            <span class="text-gray-500 text-sm hover:underline cursor-pointer" 
-                                                  title="${escapeHtml(post.CREATED_AT_STR || '')}">
-                                                ${escapeHtml(post.WAKTU_POSTING)}
-                                            </span>
+                                            <span class="text-gray-500 text-sm">${escapeHtml(post.ROLE_NAME || 'User')}</span>
                                         </div>
                                         
-                                        <div class="cursor-pointer" onclick="window.location.href='index.php?page=post-detail&id=${post.POST_ID}'">
-                                            <p class="text-gray-800 text-[15px] leading-normal break-words whitespace-pre-wrap mb-2">${kontenText}</p>
+                                        <!-- Konten -->
+                                        <div class="mb-2">
+                                            <p class="text-gray-800 text-[15px] leading-normal break-words whitespace-pre-wrap">${kontenText}</p>
                                         </div>
                                         
                                         ${postImageHTML}
 
-                                        <div class="flex items-center justify-between mt-3 max-w-md text-gray-500">
-                                            <button onclick="handleLike(this, ${post.POST_ID})" 
-                                                    class="group flex items-center space-x-2 hover:text-red-500 transition-colors ${likeColorClass} w-fit">
-                                                <div class="p-2 rounded-full group-hover:bg-red-50 transition-colors relative">
-                                                    <img src="/Sinergi/public/assets/icons/heart.svg" 
-                                                         alt="Like" 
-                                                         class="w-5 h-5 icon-transition ${iconFilterClass}">
-                                                </div>
-                                                <span class="like-count text-sm font-medium">${post.TOTAL_LIKES || 0}</span>
-                                            </button>
+                                        <!-- Footer: Actions (Left) - Date (Right) -->
+                                        <div class="flex items-center justify-between mt-3">
+                                            
+                                            <!-- Kiri: Like, Comment, Report -->
+                                            <div class="flex items-center space-x-6 text-gray-500">
+                                                <button onclick="event.stopPropagation(); handleLike(this, ${post.POST_ID})" 
+                                                        class="group flex items-center space-x-2 hover:text-red-500 transition-colors ${likeColorClass}">
+                                                    <div class="p-2 -ml-2 rounded-full group-hover:bg-red-50 transition-colors relative">
+                                                        <img src="/Sinergi/public/assets/icons/heart.svg" 
+                                                             alt="Like" 
+                                                             class="w-5 h-5 icon-transition ${iconFilterClass}">
+                                                    </div>
+                                                    <span class="like-count text-sm font-medium">${post.TOTAL_LIKES || 0}</span>
+                                                </button>
 
-                                            <a href="index.php?page=post-detail&id=${post.POST_ID}"
-                                                class="group flex items-center space-x-2 hover:text-blue-500 transition-colors w-fit">
-                                                <div class="p-2 rounded-full group-hover:bg-blue-50 transition-colors">
-                                                    <img src="/Sinergi/public/assets/icons/comment.svg" 
-                                                         alt="Komentar" 
-                                                         class="w-5 h-5">
-                                                </div>
-                                                <span class="text-sm font-medium">${post.TOTAL_COMMENTS || 0}</span>
-                                            </a>
+                                                <a href="index.php?page=post-detail&id=${post.POST_ID}"
+                                                    class="group flex items-center space-x-2 hover:text-blue-500 transition-colors">
+                                                    <div class="p-2 rounded-full group-hover:bg-blue-50 transition-colors">
+                                                        <img src="/Sinergi/public/assets/icons/comment.svg" 
+                                                             alt="Komentar" 
+                                                             class="w-5 h-5">
+                                                    </div>
+                                                    <span class="text-sm font-medium">${post.TOTAL_COMMENTS || 0}</span>
+                                                </a>
 
-                                            <button class="group flex items-center space-x-2 hover:text-green-500 transition-colors w-fit"
-                                                    onclick="openReportModal(${post.POST_ID})">
-                                                <div class="p-2 rounded-full group-hover:bg-green-50 transition-colors">
-                                                    <img src="/Sinergi/public/assets/icons/report.svg" 
-                                                         alt="Laporkan" 
-                                                         class="w-5 h-5">
-                                                </div>
-                                            </button>
+                                                ${reportButtonHTML}
+                                            </div>
+
+                                            <!-- Kanan: Tanggal -->
+                                            <div class="text-gray-400 text-xs hover:underline" title="${escapeHtml(post.CREATED_AT_STR || '')}">
+                                                ${escapeHtml(post.WAKTU_POSTING)}
+                                            </div>
+
                                         </div>
                                     </div>
                                 </div>
@@ -276,7 +281,7 @@ function handleLike(btn, postId) {
     const formData = new FormData();
     formData.append('post_id', postId);
 
-    fetch('/Sinergi/api/like_post.php', {
+    fetch('/Sinergi/index.php?page=post-api&method=toggleLike', {
         method: 'POST',
         body: formData
     })
@@ -461,7 +466,7 @@ function submitReport(event, postId) {
     formData.append('post_id', postId);
     formData.append('reason', selectedReason.value);
     
-    fetch('/Sinergi/api/tambah_laporan.php', {
+    fetch('/Sinergi/index.php?page=post-api&method=addReport', {
         method: 'POST',
         body: formData
     })
@@ -512,6 +517,3 @@ window.submitReport = submitReport;
         animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
 </style>
-
-</body>
-</html>

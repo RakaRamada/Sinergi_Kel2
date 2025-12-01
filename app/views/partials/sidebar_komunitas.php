@@ -76,14 +76,4 @@
             </div>
         </div>
     </div>
-
-    <div class="border border-black bg-white p-4 rounded-lg ">
-        <h3 class="font-bold text-lg mb-3">Ramai Dibicarakan</h3>
-        <div class="space-y-3">
-            <div>
-                <p class="font-bold text-sm text-gray-800">#TIKbutuhgedung</p>
-                <p class="text-xs text-gray-500">2.189 postingan</p>
-            </div>
-        </div>
-    </div>
 </aside>

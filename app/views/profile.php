@@ -43,8 +43,9 @@
             </div>
 
             <?php if (!empty($profile_data['BIO'])): ?>
+                <!-- Bio menggunakan whitespace-pre-line, jadi aman tanpa nl2br atau bisa disesuaikan -->
                 <div class="text-gray-800 mb-3 text-sm whitespace-pre-line leading-relaxed">
-                    <?= nl2br(htmlspecialchars($profile_data['BIO'])); ?>
+                    <?= htmlspecialchars($profile_data['BIO']); ?>
                 </div>
             <?php endif; ?>
         </div>
@@ -70,11 +71,9 @@
             <?php foreach ($user_posts as $post): ?>
                 
                 <?php 
-                    // Logika styling Like Button
                     $is_liked = ($post['USER_SUDAH_LIKE'] > 0);
                     $likeColorClass = $is_liked ? 'text-red-500' : 'text-gray-500';
-                    // Jika Anda menggunakan SVG filter CSS untuk icon, bisa tambah class di sini
-                    $iconFilterClass = $is_liked ? 'filter-red' : ''; // Pastikan di CSS ada class .filter-red { filter: ... } jika perlu
+                    $iconFilterClass = $is_liked ? 'filter-red' : ''; 
                 ?>
 
                 <div class="bg-white border-b border-gray-200 hover:bg-gray-50/30 transition-colors cursor-pointer" 
@@ -105,14 +104,15 @@
                                 
                                 <?php if (!empty($post['KONTEN'])): ?>
                                     <div class="cursor-pointer mb-2">
-                                        <p class="text-gray-800 text-[15px] leading-normal break-words whitespace-pre-wrap"><?= nl2br(htmlspecialchars($post['KONTEN'])) ?></p>
+                                        <!-- PERBAIKAN DISINI: Menghapus nl2br() -->
+                                        <p class="text-gray-800 text-[15px] leading-normal break-words whitespace-pre-wrap"><?= htmlspecialchars($post['KONTEN']) ?></p>
                                     </div>
                                 <?php endif; ?>
                                 
                                 <?php if (!empty($post['POST_IMAGE'])): ?>
                                     <div class="mt-2 mb-2">
-                                        <img src="/Sinergi/public/uploads/posts/<?= htmlspecialchars($post['POST_IMAGE']) ?>" 
-                                             onclick="event.stopPropagation(); openImageModal('/Sinergi/public/uploads/posts/<?= htmlspecialchars($post['POST_IMAGE']) ?>')"
+                                        <img src="<?= htmlspecialchars($post['POST_IMAGE']) ?>" 
+                                             onclick="event.stopPropagation(); openImageModal('<?= htmlspecialchars($post['POST_IMAGE']) ?>')"
                                              class="rounded-xl w-full border border-gray-200 max-h-[500px] object-cover hover:opacity-95 transition">
                                     </div>
                                 <?php endif; ?>
@@ -164,32 +164,44 @@
 function handleLike(btn, postId) {
     btn.disabled = true; // Cegah spam klik
     const countSpan = btn.querySelector('.like-count');
+    const iconImg = btn.querySelector('img');
     
+    // Optimistic UI Update (Langsung berubah sebelum request selesai)
+    let currentCount = parseInt(countSpan.innerText) || 0;
+    const isLiked = btn.classList.contains('text-red-500');
+    
+    if (isLiked) {
+        btn.classList.remove('text-red-500');
+        btn.classList.add('text-gray-500');
+        countSpan.innerText = currentCount > 1 ? currentCount - 1 : '';
+    } else {
+        btn.classList.remove('text-gray-500');
+        btn.classList.add('text-red-500');
+        countSpan.innerText = currentCount + 1;
+    }
+
     const fd = new FormData();
     fd.append('post_id', postId);
 
-    // Sesuaikan path ini dengan lokasi file API like Anda
-    fetch('/Sinergi/api/like_post.php', { 
+    // Pastikan URL API ini sesuai dengan struktur routing Anda
+    fetch('index.php?page=post-api&method=toggleLike', { 
         method: 'POST',
         body: fd
     })
     .then(response => response.json())
     .then(data => {
-        if (data.status === 'success') {
-            // Update angka
-            let currentCount = parseInt(data.total_likes);
-            countSpan.innerText = currentCount > 0 ? currentCount : '';
-            
-            // Update warna tombol
-            if (data.action === 'liked') {
-                btn.classList.remove('text-gray-500');
-                btn.classList.add('text-red-500');
-            } else {
-                btn.classList.remove('text-red-500');
-                btn.classList.add('text-gray-500');
-            }
-        } else {
+        if (data.status !== 'success') {
+            // Revert jika gagal
             console.error('Gagal like:', data.message);
+            if (isLiked) {
+                btn.classList.add('text-red-500');
+                btn.classList.remove('text-gray-500');
+                countSpan.innerText = currentCount;
+            } else {
+                btn.classList.add('text-gray-500');
+                btn.classList.remove('text-red-500');
+                countSpan.innerText = currentCount;
+            }
         }
     })
     .catch(error => console.error('Error:', error))

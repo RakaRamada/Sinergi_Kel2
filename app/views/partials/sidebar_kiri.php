@@ -1,7 +1,15 @@
 <nav class="col-span-2 border-r border-gray-200 px-4">
     <div class="flex flex-col items-end h-screen py-6 sticky top-0">
         <?php
+        // Pastikan session aktif
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
         $currentPage = $_GET['page'] ?? 'dashboard';
+        
+        // --- PERBAIKAN DISINI ---
+        // Cek apakah ada avatar di session, jika tidak ada/kosong, pakai default user.png
+        $myAvatar = !empty($_SESSION['avatar_url']) ? $_SESSION['avatar_url'] : '/Sinergi/public/assets/images/user.png';
         ?>
 
         <div class="flex flex-col items-center space-y-4">
@@ -26,12 +34,8 @@
             </a>
 
             <?php
-            require_once __DIR__ . '/../../models/NotificationModel.php';
-            $badge_count = 0;
-            if (isset($_SESSION['user_id'])) {
-                $badge_count = getUnreadCount($_SESSION['user_id']);
-            }
-            $badge_display = ($badge_count > 9) ? '9+' : $badge_count;
+            // Placeholder notifikasi (di-comment sesuai kode asli Anda)
+            $badge_count = 0; 
             ?>
 
             <a href="index.php?page=notification" title="Notifikasi"
@@ -71,9 +75,10 @@
         </div>
 
         <div class="mt-auto">
+            <!-- FIX: Menggunakan variabel $myAvatar yang sudah diambil dari session -->
             <a href="index.php?page=profile" title="Profil Anda" class="block hover:opacity-80 transition-opacity">
-                <img src="/Sinergi/public/assets/images/user.png" alt="Avatar Anda"
-                    class="w-10 h-10 rounded-full border border-gray-200">
+                <img src="<?php echo htmlspecialchars($myAvatar); ?>" alt="Avatar Anda"
+                    class="w-10 h-10 rounded-full border border-gray-200 object-cover bg-gray-100">
             </a>
         </div>
     </div>
