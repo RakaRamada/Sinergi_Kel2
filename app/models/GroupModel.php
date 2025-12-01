@@ -4,6 +4,7 @@
 // --- PERUBAHAN 1: Pindahkan require_once ke atas ---
 require_once __DIR__ . '/UserModel.php';
 require_once __DIR__ . '/MessageModel.php';
+require_once __DIR__ . '/NotificationModel.php';
 
 
 
@@ -53,37 +54,25 @@ function getAllGroups() {
 // Di dalam app/models/GroupModel.php
 function getGroupById($group_id) {
     require __DIR__ . '/../../config/koneksi.php';
-    if (!$conn) {
-        error_log("Koneksi DB gagal di getGroupById.");
-        return null; 
-    }
+    if (!$conn) return null;
 
-    // --- PERUBAHAN: Tambahkan f.group_image ---
     $sql = "SELECT 
                 group_id, 
                 nama_group, 
                 deskripsi, 
                 group_image, 
                 created_by_user_id, 
+                is_private, -- Tambahkan ini
                 TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at 
             FROM groups 
             WHERE group_id = :fid";
     
-    $stmt = oci_parse($conn, $sql); 
-    
+    // ... (sisanya sama seperti sebelumnya) ...
+    $stmt = oci_parse($conn, $sql);
     $clean_group_id = (int)$group_id;
-    oci_bind_by_name($stmt, ':fid', $clean_group_id, -1, SQLT_INT);
-
-    if (!oci_execute($stmt)) {
-         // ... (error handling) ...
-         $e = oci_error($stmt);
-         error_log("OCI8 Error in getGroupById: " . $e['message']);
-         @oci_close($conn);
-         return null;
-    }
-    
+    oci_bind_by_name($stmt, ':fid', $clean_group_id);
+    oci_execute($stmt);
     $group = oci_fetch_assoc($stmt);
-    // ... (sisanya sama) ...
     oci_free_statement($stmt);
     @oci_close($conn);
 
@@ -139,6 +128,7 @@ function getGroupsByUserId($user_id) {
             ) lm
             WHERE 
                 fm.user_id = :uid2
+                AND fm.status = 'active'
             ORDER BY 
                 lm.created_at DESC NULLS LAST, f.nama_group ASC";
     
@@ -184,66 +174,49 @@ function getGroupsByUserId($user_id) {
  * @param string|null $image_name Nama file gambar (atau null).
  * @return int|false ID group baru jika berhasil, false jika gagal.
  */
-function createGroup($nama_group, $deskripsi, $creator_user_id, $image_name) {
+function createGroup($nama_group, $deskripsi, $creator_user_id, $image_name, $is_private) {
     require __DIR__ . '/../../config/koneksi.php';
-    if (!$conn) {
-        error_log("Koneksi DB gagal di createGroup.");
-        return false; 
-    }
+    if (!$conn) return false;
 
-    // Siapkan variabel untuk menampung ID baru
+    $clean_private = (int)$is_private;
+    $clean_creator_id = (int)$creator_user_id;
     $new_group_id = 0;
 
-    // Query INSERT (GENERATED ALWAYS AS IDENTITY)
-    // Kita tambahkan kolom group_image
-    // Kita gunakan RETURNING... INTO... untuk mengambil ID yang baru dibuat
-    $sql = "INSERT INTO groups (nama_group, deskripsi, created_by_user_id, group_image, created_at)
-            VALUES (:nama, EMPTY_CLOB(), :creator_id, :img_name, SYSDATE)
-            RETURNING group_id, deskripsi INTO :new_id, :desk_clob";
+    // FIX: Ganti :priv jadi :p_private, :nama jadi :p_nama, dll biar aman
+    $sql = "INSERT INTO groups (nama_group, deskripsi, created_by_user_id, group_image, is_private, created_at)
+            VALUES (:p_nama, EMPTY_CLOB(), :p_creator, :p_img, :p_private, SYSDATE)
+            RETURNING group_id, deskripsi INTO :p_new_id, :p_desk_clob";
 
     $stmt = oci_parse($conn, $sql);
-    
     $clob = oci_new_descriptor($conn, OCI_D_LOB);
-    $clean_creator_id = (int)$creator_user_id;
 
-    oci_bind_by_name($stmt, ':nama', $nama_group);
-    oci_bind_by_name($stmt, ':creator_id', $clean_creator_id, -1, SQLT_INT);
-    oci_bind_by_name($stmt, ':img_name', $image_name);
+    // Bind Variable Aman
+    oci_bind_by_name($stmt, ':p_nama', $nama_group);
+    oci_bind_by_name($stmt, ':p_creator', $clean_creator_id, -1, SQLT_INT);
+    oci_bind_by_name($stmt, ':p_img', $image_name);
+    oci_bind_by_name($stmt, ':p_private', $clean_private, -1, SQLT_INT);
     
-    // Bind untuk CLOB
-    oci_bind_by_name($stmt, ':desk_clob', $clob, -1, OCI_B_CLOB);
-    // Bind untuk ID baru
-    oci_bind_by_name($stmt, ':new_id', $new_group_id, -1, SQLT_INT);
-
+    oci_bind_by_name($stmt, ':p_desk_clob', $clob, -1, OCI_B_CLOB);
+    oci_bind_by_name($stmt, ':p_new_id', $new_group_id, -1, SQLT_INT);
 
     if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) {
          $e = oci_error($stmt);
-         error_log("OCI8 Error in createGroup execute: " . $e['message']);
-         oci_rollback($conn);
-         @oci_close($conn);
-         return false;
+         error_log("OCI8 Error createGroup: " . $e['message']);
+         oci_rollback($conn); @oci_close($conn); return false;
     }
 
-    // Simpan deskripsi ke CLOB
     if (!$clob->save($deskripsi)) {
-        oci_rollback($conn);
-        error_log("OCI8 Error saving CLOB in createGroup.");
-        @oci_close($conn);
-        return false;
+        oci_rollback($conn); @oci_close($conn); return false;
     }
     
     if (!oci_commit($conn)) {
-        oci_rollback($conn);
-        error_log("OCI8 Error committing in createGroup.");
-        @oci_close($conn);
-        return false;
+        oci_rollback($conn); @oci_close($conn); return false;
     }
 
     oci_free_statement($stmt);
     oci_free_descriptor($clob);
     @oci_close($conn);
 
-    // Kembalikan ID group baru
     return $new_group_id; 
 }
 
@@ -257,39 +230,62 @@ function createGroup($nama_group, $deskripsi, $creator_user_id, $image_name) {
  * @param string $user_nama Nama pengguna (dari session, BISA KOTOR/NULL).
  * @return bool True jika berhasil, false jika gagal.
  */
-function joinGroup($user_id, $group_id, $user_nama = 'Seseorang', $custom_message = null) {
+function joinGroup($user_id, $group_id, $user_nama = 'Seseorang', $custom_message = null, $status = 'active') {
     require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) return false;
     
-    // 1. Insert ke group_members
-    $sql = "BEGIN
-                INSERT INTO group_members (user_id, group_id) VALUES (:uid, :fid);
-            EXCEPTION
-                WHEN DUP_VAL_ON_INDEX THEN NULL; 
-            END;";
+    $clean_uid = (int)$user_id;
+    $clean_fid = (int)$group_id;
+    $clean_stat = $status;
+
+    // 1. CEK DULU: Apakah user sudah ada di tabel? (Entah invited, pending, atau left)
+    // Gunakan nama bind yang aman :p_...
+    $sqlCheck = "SELECT count(*) as hitung FROM group_members WHERE user_id = :p_uid AND group_id = :p_fid";
+    $stmtCheck = oci_parse($conn, $sqlCheck);
+    oci_bind_by_name($stmtCheck, ':p_uid', $clean_uid);
+    oci_bind_by_name($stmtCheck, ':p_fid', $clean_fid);
+    oci_execute($stmtCheck);
+    $row = oci_fetch_assoc($stmtCheck);
     
-    $stmt = oci_parse($conn, $sql);
-    $clean_user_id = (int)$user_id;
-    $clean_group_id = (int)$group_id;
-
-    oci_bind_by_name($stmt, ':uid', $clean_user_id);
-    oci_bind_by_name($stmt, ':fid', $clean_group_id);
-
-    if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) { 
-         // Error handling
-         @oci_close($conn); return false;
+    // 2. EKSEKUSI (INSERT ATAU UPDATE)
+    if ($row['HITUNG'] > 0) {
+        // KASUS INVITED: User sudah ada datanya, jadi kita UPDATE statusnya
+        $sql = "UPDATE group_members 
+                SET status = :p_stat, joined_at = SYSTIMESTAMP 
+                WHERE user_id = :p_uid AND group_id = :p_fid";
+    } else {
+        // KASUS BARU: User belum pernah ada, jadi INSERT
+        $sql = "INSERT INTO group_members (user_id, group_id, status, joined_at) 
+                VALUES (:p_uid, :p_fid, :p_stat, SYSTIMESTAMP)";
     }
-    oci_commit($conn); // Commit anggota baru dulu
 
-    // 2. Buat Pesan Sistem
-    // Bersihkan nama
-    $nama_asli = $user_nama ?? 'Seseorang';
-    $nama_final = trim(preg_replace('/[[:cntrl:]\s]/u', ' ', $nama_asli)); 
-    if (empty($nama_final)) $nama_final = 'Seseorang';
+    $stmt = oci_parse($conn, $sql);
+    
+    // Bind Parameter Aman (Anti ORA-01745)
+    oci_bind_by_name($stmt, ':p_uid', $clean_uid);
+    oci_bind_by_name($stmt, ':p_fid', $clean_fid);
+    oci_bind_by_name($stmt, ':p_stat', $clean_stat);
 
-    // Tentukan pesan: Pakai custom jika ada, jika tidak pakai default "telah bergabung"
-    $pesan_sistem = $custom_message ? $custom_message : ($nama_final . ' telah bergabung dengan group.');
+    // Eksekusi dengan COMMIT OTOMATIS agar perubahan status langsung tersimpan
+    if (!oci_execute($stmt, OCI_COMMIT_ON_SUCCESS)) { 
+         $e = oci_error($stmt);
+         error_log("Join Group Error: " . $e['message']);
+         @oci_close($conn); 
+         return false;
+    }
 
-    createSystemMessage($clean_group_id, $clean_user_id, 'join', $pesan_sistem);
+    // 3. KIRIM PESAN SISTEM (Hanya kalau status Active)
+    // Biar di chat grup muncul: "Si Fulan telah bergabung"
+    if ($clean_stat === 'active') {
+        $nama_asli = $user_nama ?? 'Seseorang';
+        $nama_final = trim(preg_replace('/[[:cntrl:]\s]/u', ' ', $nama_asli)); 
+        if (empty($nama_final)) $nama_final = 'Seseorang';
+
+        $pesan = $custom_message ? $custom_message : ($nama_final . ' telah bergabung dengan group.');
+        
+        // Panggil fungsi system message (Pastikan fungsi ini juga aman bind-nya di file yang sama)
+        createSystemMessage($clean_fid, $clean_uid, 'join', $pesan);
+    }
 
     oci_free_statement($stmt);
     @oci_close($conn);
@@ -368,43 +364,42 @@ function leaveGroup($user_id, $group_id, $user_nama = 'Seseorang') {
  * @param string $searchTerm Kata kunci pencarian.
  * @return array Array berisi group yang cocok.
  */
-function searchGroups($searchTerm) {
+function searchGroups($searchTerm, $current_user_id = 0) {
     require __DIR__ . '/../../config/koneksi.php';
-    if (!$conn) {
-        error_log("Koneksi DB gagal di searchGroups.");
-        return [];
-    }
+    if (!$conn) return [];
 
-    // Kita akan mencari group yang namanya mengandung (LIKE) searchTerm.
-    // Kita gunakan UPPER() di kedua sisi agar pencarian tidak case-sensitive (tidak peduli huruf besar/kecil).
-    $sql = "SELECT group_id, nama_group, deskripsi, group_image
-            FROM groups 
-            WHERE UPPER(nama_group) LIKE :term";
+    // Query Search + Cek Status Member User yang sedang login
+    // PERHATIKAN: :uid diganti jadi :p_search_uid
+    // :term diganti jadi :p_term (biar konsisten aman)
+    $sql = "SELECT g.group_id, g.nama_group, g.deskripsi, g.group_image, g.is_private,
+                   gm.status AS membership_status
+            FROM groups g
+            LEFT JOIN group_members gm ON (g.group_id = gm.group_id AND gm.user_id = :p_search_uid)
+            WHERE UPPER(g.nama_group) LIKE :p_term
+            ORDER BY g.created_at DESC";
             
-    // Siapkan bind variable dengan wildcard (%)
     $searchTermWildcard = '%' . strtoupper($searchTerm) . '%';
-
     $stmt = oci_parse($conn, $sql);
     
-    // Bind searchTerm
-    oci_bind_by_name($stmt, ':term', $searchTermWildcard);
+    $clean_uid = (int)$current_user_id;
+    
+    // Bind dengan nama baru yang aman
+    oci_bind_by_name($stmt, ':p_term', $searchTermWildcard);
+    oci_bind_by_name($stmt, ':p_search_uid', $clean_uid);
 
     if (!oci_execute($stmt)) {
-         $e = oci_error($stmt);
-         error_log("OCI8 Error in searchGroups: " . $e['message']);
-         @oci_close($conn);
-         return [];
+        // (Opsional) Uncomment untuk debugging jika masih error
+        // $e = oci_error($stmt); error_log("Search Error: " . $e['message']);
+        return [];
     }
 
     $groups = [];
     while ($row = oci_fetch_assoc($stmt)) {
-        // Kita perlu memproses CLOB (deskripsi) jika ada
         if (isset($row['DESKRIPSI']) && $row['DESKRIPSI'] instanceof OCILob) {
             $row['DESKRIPSI'] = $row['DESKRIPSI']->read($row['DESKRIPSI']->size());
         }
         $groups[] = array_change_key_case($row, CASE_LOWER);
     }
-
     oci_free_statement($stmt);
     @oci_close($conn);
     return $groups;
@@ -417,55 +412,57 @@ function searchGroups($searchTerm) {
  * @return array Array berisi daftar anggota (user).
  */
 function getGroupMembers($group_id) {
-    // 1. Koneksi stabil
     require __DIR__ . '/../../config/koneksi.php';
-    if (!$conn) {
-        error_log("Koneksi DB gagal di getGroupMembers.");
-        return [];
-    }
+    if (!$conn) return [];
 
-    // Pastikan ID aman (dari bug ORA-01745)
     $safe_group_id = (int)$group_id;
 
-    // 2. Query SQL (JOIN 3 tabel: group_members -> users -> roles)
-    // Kita ambil info user dan role mereka di group
-    $sql = "SELECT 
-                u.user_id, 
-                u.username, 
-                u.nama_lengkap, 
-                r.role_name 
-            FROM 
-                group_members fm
-            JOIN 
-                users u ON fm.user_id = u.user_id
-            JOIN 
-                roles r ON u.role_id = r.role_id
-            WHERE 
-                fm.group_id = " . $safe_group_id . "
-            ORDER BY 
-                u.nama_lengkap ASC"; // Urutkan A-Z
+    // FIX: u.foto_profil -> u.avatar_url
+    $sql = "SELECT u.user_id, u.username, u.nama_lengkap, u.avatar_url, r.role_name 
+            FROM group_members fm
+            JOIN users u ON fm.user_id = u.user_id
+            JOIN roles r ON u.role_id = r.role_id
+            WHERE fm.group_id = :fid AND fm.status = 'active'
+            ORDER BY u.nama_lengkap ASC";
 
     $stmt = oci_parse($conn, $sql);
+    oci_bind_by_name($stmt, ':fid', $safe_group_id);
+    oci_execute($stmt);
 
-    // 3. Eksekusi
-    if (!oci_execute($stmt)) {
-         $e = oci_error($stmt);
-         error_log("OCI8 Error in getGroupMembers: " . $e['message']);
-         @oci_close($conn);
-         return [];
-    }
-
-    // 4. Ambil semua hasilnya
     $members = [];
     while ($row = oci_fetch_assoc($stmt)) {
         $members[] = array_change_key_case($row, CASE_LOWER);
     }
-
-    // 5. Bebaskan resource & tutup koneksi
     oci_free_statement($stmt);
     @oci_close($conn);
-
     return $members;
+}
+
+// 2. UPDATE: getPendingMembers (Pakai avatar_url)
+function getPendingMembers($group_id) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) return [];
+
+    $safe_group_id = (int)$group_id;
+
+    // FIX: u.foto_profil -> u.avatar_url
+    $sql = "SELECT u.user_id, u.username, u.nama_lengkap, u.avatar_url 
+            FROM group_members fm
+            JOIN users u ON fm.user_id = u.user_id
+            WHERE fm.group_id = :fid AND fm.status = 'pending'
+            ORDER BY fm.joined_at ASC";
+
+    $stmt = oci_parse($conn, $sql);
+    oci_bind_by_name($stmt, ':fid', $safe_group_id);
+    oci_execute($stmt);
+
+    $pending = [];
+    while ($row = oci_fetch_assoc($stmt)) {
+        $pending[] = array_change_key_case($row, CASE_LOWER);
+    }
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    return $pending;
 }
 
 /**
@@ -477,77 +474,63 @@ function getGroupMembers($group_id) {
  * @param string|null $image_name Nama file gambar baru (atau null jika tidak berubah).
  * @return bool True jika berhasil, false jika gagal.
  */
-function updateGroup($group_id, $nama_group, $deskripsi, $image_name) {
+function updateGroup($group_id, $nama_group, $deskripsi, $image_name, $is_private) {
     require __DIR__ . '/../../config/koneksi.php';
-    if (!$conn) {
-        error_log("Koneksi DB gagal di updateGroup.");
-        return false; 
-    }
+    if (!$conn) return false;
 
-    // 1. Tentukan query SQL
-    // Kita perlu 2 query: satu jika gambar diubah, satu jika tidak.
+    $clean_group_id = (int)$group_id;
+    $clean_private  = (int)$is_private;
+
+    // FIX: Ganti nama bind variable agar tidak bentrok dengan keyword Oracle
     if ($image_name !== null) {
-        // Jika ada gambar baru, update semua 3 kolom
         $sql = "UPDATE groups 
-                SET nama_group = :nama, 
+                SET nama_group = :p_nama, 
                     deskripsi = EMPTY_CLOB(), 
-                    group_image = :img_name 
-                WHERE group_id = :fid
-                RETURNING deskripsi INTO :desk_clob";
+                    group_image = :p_img,
+                    is_private = :p_private
+                WHERE group_id = :p_gid
+                RETURNING deskripsi INTO :p_desk_clob";
     } else {
-        // Jika tidak ada gambar baru, HANYA update nama dan deskripsi
         $sql = "UPDATE groups 
-                SET nama_group = :nama, 
-                    deskripsi = EMPTY_CLOB() 
-                WHERE group_id = :fid
-                RETURNING deskripsi INTO :desk_clob";
+                SET nama_group = :p_nama, 
+                    deskripsi = EMPTY_CLOB(),
+                    is_private = :p_private
+                WHERE group_id = :p_gid
+                RETURNING deskripsi INTO :p_desk_clob";
     }
 
     $stmt = oci_parse($conn, $sql);
-    
     $clob = oci_new_descriptor($conn, OCI_D_LOB);
-    $clean_group_id = (int)$group_id;
 
-    // 2. Bind parameter
-    oci_bind_by_name($stmt, ':nama', $nama_group);
-    oci_bind_by_name($stmt, ':fid', $clean_group_id, -1, SQLT_INT);
-    oci_bind_by_name($stmt, ':desk_clob', $clob, -1, OCI_B_CLOB);
+    // Bind Variable Aman
+    oci_bind_by_name($stmt, ':p_nama', $nama_group);
+    oci_bind_by_name($stmt, ':p_gid', $clean_group_id, -1, SQLT_INT);
+    oci_bind_by_name($stmt, ':p_private', $clean_private, -1, SQLT_INT);
+    oci_bind_by_name($stmt, ':p_desk_clob', $clob, -1, OCI_B_CLOB);
     
-    // Bind gambar HANYA jika query-nya memerlukannya
     if ($image_name !== null) {
-        oci_bind_by_name($stmt, ':img_name', $image_name);
+        oci_bind_by_name($stmt, ':p_img', $image_name);
     }
 
-    // 3. Eksekusi
     if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) {
          $e = oci_error($stmt);
-         error_log("OCI8 Error in updateGroup execute: " . $e['message']);
-         oci_rollback($conn);
-         @oci_close($conn);
-         return false;
+         error_log("OCI8 Error updateGroup: " . $e['message']);
+         oci_rollback($conn); @oci_close($conn); return false;
     }
 
-    // 4. Simpan deskripsi ke CLOB
     if (!$clob->save($deskripsi)) {
-        oci_rollback($conn);
-        error_log("OCI8 Error saving CLOB in updateGroup.");
-        @oci_close($conn);
-        return false;
+        oci_rollback($conn); @oci_close($conn); return false;
     }
     
-    // 5. Commit
     if (!oci_commit($conn)) {
-        oci_rollback($conn);
-        error_log("OCI8 Error committing in updateGroup.");
-        @oci_close($conn);
-        return false;
+        oci_rollback($conn); @oci_close($conn); return false;
     }
 
     oci_free_statement($stmt);
     oci_free_descriptor($clob);
     @oci_close($conn);
 
-    return true; // Sukses
+    return true;
 }
 
 /**
@@ -557,8 +540,8 @@ function updateGroup($group_id, $nama_group, $deskripsi, $image_name) {
 function getUsersAvailableForGroup($group_id, $search = '') {
     require __DIR__ . '/../../config/koneksi.php';
 
-    // KITA KEMBALIKAN 'foto_profil' KE SINI
-    $sql = "SELECT user_id, username, nama_lengkap, foto_profil 
+    // FIX: foto_profil -> avatar_url
+    $sql = "SELECT user_id, username, nama_lengkap, avatar_url 
             FROM users 
             WHERE user_id NOT IN (
                 SELECT user_id FROM group_members WHERE group_id = :fid
@@ -571,7 +554,6 @@ function getUsersAvailableForGroup($group_id, $search = '') {
     $sql .= " ORDER BY nama_lengkap ASC FETCH FIRST 20 ROWS ONLY"; 
 
     $stmt = oci_parse($conn, $sql);
-    
     $fid = (int)$group_id;
     oci_bind_by_name($stmt, ':fid', $fid);
 
@@ -580,20 +562,16 @@ function getUsersAvailableForGroup($group_id, $search = '') {
         oci_bind_by_name($stmt, ':search', $s);
     }
 
-    if (!@oci_execute($stmt)) {
-        return [];
-    }
+    if (!@oci_execute($stmt)) return [];
 
     $users = [];
     while ($row = oci_fetch_assoc($stmt)) {
-        // Pastikan key jadi huruf kecil (foto_profil)
         $users[] = array_change_key_case($row, CASE_LOWER);
     }
-    
     oci_free_statement($stmt);
     @oci_close($conn);
     return $users;
-} 
+}
 
 /**
  * Mengeluarkan member secara paksa (Kick).
@@ -637,4 +615,124 @@ function kickMember($group_id, $target_user_id, $target_user_name) {
     return $res;
 }
 
+function processJoinRequest($user_id, $group_id, $action) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) return false;
+    
+    $clean_uid = (int)$user_id;
+    $clean_fid = (int)$group_id;
+    $clean_action = trim($action);
+
+    // Tentukan Query
+    if ($clean_action === 'approve') {
+        // UPDATE status jadi active
+        // Perhatikan nama bind variable: :p_request_uid dan :p_request_gid
+        $sql = "UPDATE group_members SET status = 'active' 
+                WHERE user_id = :p_request_uid AND group_id = :p_request_gid";
+    } elseif ($clean_action === 'reject') {
+        // DELETE data
+        $sql = "DELETE FROM group_members 
+                WHERE user_id = :p_request_uid AND group_id = :p_request_gid";
+    } else {
+        return false;
+    }
+
+    $stmt = oci_parse($conn, $sql);
+    
+    // BINDING AMAN (Anti ORA-01745)
+    oci_bind_by_name($stmt, ':p_request_uid', $clean_uid, -1, SQLT_INT);
+    oci_bind_by_name($stmt, ':p_request_gid', $clean_fid, -1, SQLT_INT);
+    
+    // Eksekusi + Auto Commit
+    // Kita gunakan OCI_COMMIT_ON_SUCCESS agar langsung tersimpan permanen
+    if (!oci_execute($stmt, OCI_COMMIT_ON_SUCCESS)) {
+        $e = oci_error($stmt);
+        error_log("SQL Error processJoinRequest: " . $e['message']);
+        oci_free_statement($stmt);
+        @oci_close($conn);
+        return false;
+    }
+
+    // Cek apakah ada baris yang berubah
+    // (Opsional, tapi kita return true aja kalau tidak error SQL biar tidak redirect ke 'failed')
+    $rows = oci_num_rows($stmt);
+    
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    
+    return true;
+}
+
+function inviteUserToGroup($admin_id, $target_user_id, $group_id, $group_name) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) return false;
+    
+    // 1. Cek apakah user sudah ada di grup (status apapun)
+    $sqlCheck = "SELECT count(*) as hitung FROM group_members 
+                 WHERE user_id = :p_uid AND group_id = :p_gid";
+    $stmtCheck = oci_parse($conn, $sqlCheck);
+    
+    $clean_uid = (int)$target_user_id;
+    $clean_gid = (int)$group_id;
+    
+    oci_bind_by_name($stmtCheck, ':p_uid', $clean_uid);
+    oci_bind_by_name($stmtCheck, ':p_gid', $clean_gid);
+    oci_execute($stmtCheck);
+    $row = oci_fetch_assoc($stmtCheck);
+    
+    if ($row['HITUNG'] > 0) {
+        return false; // User sudah ada
+    }
+
+    // 2. Insert ke Group Members dengan status 'invited'
+    $sqlInsert = "INSERT INTO group_members (user_id, group_id, status, joined_at) 
+                  VALUES (:p_uid, :p_gid, 'invited', SYSTIMESTAMP)";
+    $stmt = oci_parse($conn, $sqlInsert);
+    oci_bind_by_name($stmt, ':p_uid', $clean_uid);
+    oci_bind_by_name($stmt, ':p_gid', $clean_gid);
+    
+    // Eksekusi Insert Member
+    if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) {
+        oci_rollback($conn); return false;
+    }
+
+    // 3. Commit Member Dulu
+    oci_commit($conn); 
+
+    // 4. KIRIM NOTIFIKASI (Pakai Fungsi dari NotificationModel.php)
+    // createNotification($penerima, $pelaku, $tipe, $pesan, $post_id, $group_id)
+    $msg = "Mengundang Anda bergabung ke grup: " . $group_name;
+    createNotification($clean_uid, $admin_id, 'group_invite', $msg, null, $clean_gid);
+
+    oci_free_statement($stmt);
+    @oci_close($conn);
+    return true;
+}
+
+function isGroupMember($user_id, $group_id) {
+    require __DIR__ . '/../../config/koneksi.php';
+    if (!$conn) return false;
+
+    // Cek status harus 'active'
+    $sql = "SELECT count(*) as hitung FROM group_members 
+            WHERE user_id = :p_uid AND group_id = :p_gid AND status = 'active'";
+            
+    $stmt = oci_parse($conn, $sql);
+    
+    $clean_uid = (int)$user_id;
+    $clean_gid = (int)$group_id;
+    
+    oci_bind_by_name($stmt, ':p_uid', $clean_uid);
+    oci_bind_by_name($stmt, ':p_gid', $clean_gid);
+    
+    if (!oci_execute($stmt)) {
+        return false;
+    }
+    
+    $row = oci_fetch_assoc($stmt);
+    oci_free_statement($stmt);
+    @oci_close($conn);
+
+    return ($row['HITUNG'] > 0);
+}
 ?>

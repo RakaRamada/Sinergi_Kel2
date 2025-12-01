@@ -9,15 +9,12 @@ require_once __DIR__ . '/../models/GroupModel.php';
  * Fungsi untuk menampilkan halaman pesan (daftar group/chat group).
  */
 function showMessages() {
-    // --- PERBAIKAN PRG (POST-REDIRECT-GET) ---
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $_SERVER['REQUEST_URI']);
         exit();
     }
     
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    if (session_status() === PHP_SESSION_NONE) session_start();
     
     $group_id = $_GET['group_id'] ?? null; 
     $messages = [];
@@ -26,27 +23,29 @@ function showMessages() {
 
     // Pastikan user sudah login
     if (isset($_SESSION['user_id'])) {
-        $user_id = (int)$_SESSION['user_id']; // <-- Ambil user_id
-        
-        // Panggil fungsi V2 yang baru (sudah ada notif/snippet)
+        $user_id = (int)$_SESSION['user_id'];
         $groups = getGroupsByUserId($user_id);
         
-    } else {
-        // Jika tidak login, $groups akan kosong
-        // Auth Guard di index.php akan menangani
-    }
+        // --- SATPAM 1: CEK KEANGGOTAAN ---
+        if ($group_id) {
+            // Cek apakah user punya hak akses ke grup ini?
+            $isMember = isGroupMember($user_id, $group_id);
+            
+            if (!$isMember) {
+                // Kalau bukan member (dikick/keluar), tendang ke halaman utama pesan
+                header("Location: index.php?page=messages&error=access_denied");
+                exit();
+            }
 
-    // Jika ada group_id di URL, ambil pesan untuk group tersebut
-    if ($group_id && isset($user_id)) { // <-- Pastikan user_id ada
+            // Kalau aman, lanjut ambil pesan
+            $messages = getMessagesByGroupId((int)$group_id);
+            $groupInfo = getGroupById((int)$group_id);
+            updateLastReadMessage($user_id, (int)$group_id);
+        }
+        // ---------------------------------
         
-        $messages = getMessagesByGroupId((int)$group_id);
-        $groupInfo = getGroupById((int)$group_id);
-
-        // --- INI DIA PERUBAHAN UTAMANYA ---
-        // Saat user membuka chat, kita update "terakhir dibaca"
-        // Ini akan otomatis menghapus notif di sidebar
-        updateLastReadMessage($user_id, (int)$group_id);
-        // --- AKHIR PERUBAHAN ---
+    } else {
+        // Redirect login jika perlu
     }
     
     require 'app/views/messages.php'; 
@@ -73,6 +72,12 @@ function storeMessage() {
     // Note: JS mengirim 'forum_id' (sesuai form chat_app.js), tapi kita anggap itu group_id
     $group_id = (int)$_POST['forum_id']; 
     $sender_id = (int)$_SESSION['user_id'];
+    if (!isGroupMember($sender_id, $group_id)) {
+        header('Content-Type: application/json');
+        // Kirim error JSON biar JS bisa nangkep
+        echo json_encode(['error' => 'Anda bukan anggota grup ini.']);
+        exit();
+    }
     $isi_pesan = trim($_POST['isi_pesan'] ?? ''); 
     $file = $_FILES['file_upload'] ?? null;
     $reply_to_message_id = (int)($_POST['reply_to_message_id'] ?? 0);

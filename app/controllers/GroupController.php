@@ -28,6 +28,8 @@ function storeGroup() {
         
         $nama_group = trim($_POST['nama_group']);
         $deskripsi = trim($_POST['deskripsi']);
+        // Tangkap is_private (0 atau 1)
+        $is_private = isset($_POST['is_private']) ? (int)$_POST['is_private'] : 0;
         $creator_user_id = (int)$_SESSION['user_id'];
         $group_image_file = $_FILES['group_image'];
         $image_name_to_db = null; 
@@ -55,9 +57,9 @@ function storeGroup() {
         }
 
         // Panggil Model (Langkah 6)
-        $new_group_id = createGroup($nama_group, $deskripsi, $creator_user_id, $image_name_to_db);
-
-        if ($new_group_id) {
+            $new_group_id = createGroup($nama_group, $deskripsi, $creator_user_id, $image_name_to_db, $is_private);
+            
+            if ($new_group_id) {
             // Otomatis join ke group yang baru dibuat
             
             // --- KITA HARUS AMBIL NAMA DI SINI JUGA ---
@@ -90,52 +92,42 @@ function storeGroup() {
  * Dipanggil oleh router 'page=join-group'.
  */
 function handleJoinGroup() {
-    // 0. Pastikan session aktif untuk mendapatkan ID user
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    if (session_status() === PHP_SESSION_NONE) session_start();
 
-    // 1. Validasi: Pastikan user login DAN group_id ada di URL
     if (isset($_SESSION['user_id']) && isset($_GET['group_id'])) {
-        
         $user_id = (int)$_SESSION['user_id'];
         $group_id = (int)$_GET['group_id'];
+        $nama_asli = $_SESSION['nama_lengkap'] ?? 'Seseorang';
 
-        // --- PERBAIKAN LOGIKA FINAL ---
-        // 1. Ambil nama asli dari session
-        $nama_asli = $_SESSION['nama_lengkap'] ?? '';
-        
-        // 2. Buat versi bersih HANYA untuk tes (hapus SEMUA spasi & karakter aneh/control)
-        //    [[:cntrl:]] -> semua control character (termasuk null byte \0)
-        //    \s          -> semua whitespace (termasuk spasi "ajaib" \u)
-        $nama_untuk_tes = preg_replace('/[[:cntrl:]\s]/u', '', $nama_asli);
-
-        // 3. Cek: Apakah versi bersihnya itu KOSONG?
-        if (empty($nama_untuk_tes)) {
-            // Jika ya, nama itu pasti "kosong" atau spasi "ajaib". Gunakan default.
-            $user_nama = 'Seseorang';
-        } else {
-            // Jika tidak, nama itu valid. Gunakan nama ASLI (tapi trim spasi biasa).
-            $user_nama = trim($nama_asli);
+        // 1. Cek Info Group (Public/Private)
+        $group = getGroupById($group_id);
+        if (!$group) {
+            header('Location: index.php?page=search&tab=group&error=not_found');
+            exit();
         }
-        // ---------------------------------
 
-        // 4. Panggil fungsi Model 'joinGroup' (yang sudah kita buat)
-        $success = joinGroup($user_id, $group_id, $user_nama);
+        // 2. Tentukan Status
+        $is_private = ($group['is_private'] == 1);
+        $status = $is_private ? 'pending' : 'active';
+        $pesan_join = $is_private ? '' : null; // Kalau private, gak usah kirim pesan chat dulu
+
+        // 3. Panggil Model
+        $success = joinGroup($user_id, $group_id, $nama_asli, $pesan_join, $status);
 
         if ($success) {
-            // 5. Berhasil! Arahkan user ke halaman group yang baru dia ikuti
-            header('Location: index.php?page=messages&group_id=' . $group_id);
+            if ($is_private) {
+                // Kalau Private, arahkan balik ke search dengan notif
+                header('Location: index.php?page=search&tab=group&q=' . urlencode($_GET['q'] ?? '') . '&success=requested');
+            } else {
+                // Kalau Public, langsung masuk chat
+                header('Location: index.php?page=messages&group_id=' . $group_id);
+            }
             exit();
         } else {
-            // 6. Gagal (mungkin karena error DB)
-            // Kembali ke halaman search dengan pesan error
             header('Location: index.php?page=search&tab=group&error=join_failed');
             exit();
         }
-
     } else {
-        // 7. Jika tidak login atau tidak ada group_id, tendang ke login
         header('Location: index.php?page=login');
         exit();
     }
@@ -145,43 +137,35 @@ function handleJoinGroup() {
  * Menampilkan halaman detail group (info, anggota, dll.)
  */
 function showGroupDetails() {
-    // 0. Pastikan session aktif
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
+    if (session_status() === PHP_SESSION_NONE) session_start();
 
-    // 1. Validasi: Pastikan user login DAN group_id ada di URL
     if (isset($_SESSION['user_id']) && isset($_GET['group_id'])) {
-        
         $user_id = (int)$_SESSION['user_id'];
         $group_id = (int)$_GET['group_id'];
 
-        // 2. Panggil Model untuk data dasar group
         $group_info = getGroupById($group_id);
+        
+        // Cek Admin
+        $is_creator = ($group_info && $group_info['created_by_user_id'] == $user_id);
 
-        // 3. Panggil Model untuk daftar anggota
-        $group_members = getGroupMembers($group_id); 
-
-        // 4. Cek apakah user ini adalah pembuat group (untuk tombol 'Edit')
-        $is_creator = false;
-        if ($group_info && isset($group_info['created_by_user_id'])) {
-            $is_creator = ($group_info['created_by_user_id'] == $user_id);
-        }
-
-        // --- TAMBAHAN BARU ---
-        // 5. Panggil Model untuk media dan dokumen
+        // Ambil Data Utama
+        $group_members = getGroupMembers($group_id); // Hanya Active
         $group_media = getMediaByGroupId($group_id);
         $group_documents = getDocumentsByGroupId($group_id);
-        // --- AKHIR TAMBAHAN BARU ---
 
+        // Ambil Request (Hanya jika Admin & Grup Private)
+        $pending_members = [];
+        if ($is_creator && $group_info['is_private']) {
+            $pending_members = getPendingMembers($group_id);
+        }
 
-        // 6. Muat file view
-        //    (Variabel $group_media dan $group_documents otomatis akan
-        //     tersedia di dalam file view)
+        // Tab Aktif (Default: diskusi)
+        $active_tab = $_GET['view'] ?? 'diskusi';
+
+        // Load View Baru
         require 'app/views/group_details.php';
 
     } else {
-        // Jika tidak login atau tidak ada group_id, tendang ke login
         header('Location: index.php?page=login');
         exit();
     }
@@ -294,6 +278,8 @@ function handleUpdateGroup() {
         $group_id = (int)$_POST['group_id'];
         $nama_group = trim($_POST['nama_group']);
         $deskripsi = trim($_POST['deskripsi']);
+        // Tangkap is_private
+        $is_private = isset($_POST['is_private']) ? (int)$_POST['is_private'] : 0;
         $group_image_file = $_FILES['group_image']; 
 
         // 3. Validasi Keamanan: Cek apakah user ini adalah pembuat group
@@ -333,7 +319,7 @@ function handleUpdateGroup() {
         }
         
         // 6. Panggil Model untuk UPDATE
-        $success = updateGroup($group_id, $nama_group, $deskripsi, $image_name_to_db);
+        $success = updateGroup($group_id, $nama_group, $deskripsi, $image_name_to_db, $is_private);
 
         if ($success) {
             // 7. Berhasil! Arahkan kembali ke halaman info group
@@ -487,6 +473,72 @@ function searchCandidatesAPI() {
     header('Content-Type: application/json');
     echo json_encode($candidates);
     exit;
+}
+
+function handleGroupRequest() {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    
+    $admin_id = $_SESSION['user_id'];
+    $group_id = (int)$_GET['group_id'];
+    $target_id = (int)$_GET['user_id'];
+    $action = $_GET['action']; // 'approve' atau 'reject'
+
+    // Validasi Admin
+    $group = getGroupById($group_id);
+    if (!$group || $group['created_by_user_id'] != $admin_id) {
+        header("Location: index.php?page=group-details&group_id=$group_id&error=unauthorized");
+        exit();
+    }
+
+    // Eksekusi Model
+    $success = processJoinRequest($target_id, $group_id, $action);
+    
+    // Redirect kembali ke tab 'members'
+    if ($success) {
+        header("Location: index.php?page=group-details&group_id=$group_id&view=members&success=processed");
+    } else {
+        header("Location: index.php?page=group-details&group_id=$group_id&view=members&error=failed");
+    }
+    exit();
+}
+
+function handleSendInvite() {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // 1. Ambil Data
+        $admin_id = $_SESSION['user_id'];
+        $group_id = (int)$_POST['group_id'];
+        $target_user_id = (int)$_POST['target_user_id'];
+        
+        // 2. Ambil Info Group (untuk cek admin & ambil nama group)
+        $group = getGroupById($group_id);
+        
+        // Validasi: Pastikan group ada
+        if (!$group) {
+            header("Location: index.php?page=dashboard&error=group_not_found");
+            exit();
+        }
+
+        // Validasi: Pastikan pengirim adalah ADMIN group
+        if ($group['created_by_user_id'] != $admin_id) {
+            header("Location: index.php?page=group-details&group_id=$group_id&error=unauthorized");
+            exit();
+        }
+
+        // 3. Panggil Model untuk eksekusi Invite
+        // Pastikan fungsi inviteUserToGroup sudah ada di GroupModel.php
+        $success = inviteUserToGroup($admin_id, $target_user_id, $group_id, $group['nama_group']);
+
+        // 4. Redirect dengan pesan
+        if ($success) {
+            header("Location: index.php?page=group-details&group_id=$group_id&view=members&success=invited");
+        } else {
+            // Biasanya gagal karena user sudah jadi member atau sudah di-invite sebelumnya
+            header("Location: index.php?page=group-details&group_id=$group_id&view=members&error=already_invited_or_member");
+        }
+        exit();
+    }
 }
 
 ?>

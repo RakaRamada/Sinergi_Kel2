@@ -222,6 +222,11 @@ switch ($page) {
         require_once 'app/controllers/GroupController.php';
         showGroupDetails();
         break;
+    
+    case 'process-request':
+        require_once 'app/controllers/GroupController.php';
+        handleGroupRequest();
+        break;
 
         
         // 2. Tambahkan Case Baru
@@ -258,6 +263,21 @@ switch ($page) {
     case 'api-delete-forum-comment':
         require_once 'app/controllers/ForumController.php';
         handleDeleteForumCommentAPI();
+        break;
+
+    case 'process-invite-member': // Admin kirim invite (tetap di GroupController)
+        require_once 'app/controllers/GroupController.php';
+        handleSendInvite();
+        break;
+
+    case 'accept-invite': // User terima (Pindah ke NotificationController)
+        require_once 'app/controllers/NotificationController.php';
+        handleAcceptInvite();
+        break;
+
+    case 'reject-invite': // User tolak (Pindah ke NotificationController)
+        require_once 'app/controllers/NotificationController.php';
+        handleRejectInvite();
         break;
 
 

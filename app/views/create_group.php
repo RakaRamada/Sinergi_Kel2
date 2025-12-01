@@ -1,14 +1,4 @@
-<?php 
-// File: app/views/create_group.php
-// Halaman ini akan dipanggil oleh GroupController, 
-// jadi $header dan $footer akan dipanggil oleh index.php
-
-// (Kita asumsikan Anda menggunakan struktur router 'Rombakan Besar'
-// di mana header/footer dipanggil oleh index.php)
-?>
-
 <main class="col-span-6 border-r border-gray-200">
-
     <div
         class="flex items-center space-x-4 p-4 border-b border-gray-200 sticky top-0 bg-white/80 backdrop-blur-sm z-10">
         <a href="javascript:history.back()" title="Kembali" class="p-2 rounded-full hover:bg-gray-200">
@@ -21,35 +11,63 @@
     </div>
 
     <div class="p-6">
-        <form action="index.php?page=store-group" method="POST" enctype="multipart/form-data" class="space-y-4">
+        <form action="index.php?page=store-group" method="POST" enctype="multipart/form-data" class="space-y-6">
 
             <div>
-                <label for="nama_group" class="block text-sm font-medium text-gray-700 mb-1">Nama Group (Nama
-                    Grup)</label>
-                <input type="text" id="nama_group" name="nama_group"
-                    class="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Contoh: Fans Klub PHP" required>
+                <label class="block text-sm font-bold text-gray-900 mb-2">Nama Group</label>
+                <input type="text" name="nama_group"
+                    class="w-full border border-gray-300 rounded-lg py-2.5 px-4 focus:ring-2 focus:ring-black focus:border-black transition"
+                    placeholder="Contoh: Komunitas Programmer PHP" required>
             </div>
 
             <div>
-                <label for="group_image" class="block text-sm font-medium text-gray-700 mb-1">Gambar Profil Group
-                    (Opsional)</label>
-                <input type="file" id="group_image" name="group_image"
-                    class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                    accept="image/png, image/jpeg, image/gif">
+                <label class="block text-sm font-bold text-gray-900 mb-2">Jenis Group</label>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label
+                        class="relative flex items-start p-4 border rounded-xl cursor-pointer hover:bg-gray-50 hover:border-gray-300 transition group-type-option">
+                        <div class="flex items-center h-5">
+                            <input type="radio" name="is_private" value="0"
+                                class="h-4 w-4 text-black border-gray-300 focus:ring-black" checked>
+                        </div>
+                        <div class="ml-3 text-sm">
+                            <span class="block font-bold text-gray-900">Publik</span>
+                            <span class="block text-gray-500 mt-1">Siapa saja bisa melihat dan bergabung langsung ke
+                                grup ini.</span>
+                        </div>
+                    </label>
+
+                    <label
+                        class="relative flex items-start p-4 border rounded-xl cursor-pointer hover:bg-gray-50 hover:border-gray-300 transition group-type-option">
+                        <div class="flex items-center h-5">
+                            <input type="radio" name="is_private" value="1"
+                                class="h-4 w-4 text-black border-gray-300 focus:ring-black">
+                        </div>
+                        <div class="ml-3 text-sm">
+                            <span class="block font-bold text-gray-900">Privat</span>
+                            <span class="block text-gray-500 mt-1">Hanya anggota yang bisa melihat isi. Join harus
+                                disetujui Admin.</span>
+                        </div>
+                    </label>
+                </div>
             </div>
 
             <div>
-                <label for="deskripsi" class="block text-sm font-medium text-gray-700 mb-1">Deskripsi Singkat (Deskripsi
-                    Grup)</label>
-                <textarea id="deskripsi" name="deskripsi" rows="4"
-                    class="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Jelaskan tentang group ini..." required></textarea>
+                <label class="block text-sm font-bold text-gray-900 mb-2">Gambar Sampul/Profil</label>
+                <input type="file" name="group_image"
+                    class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-black file:text-white hover:file:bg-gray-800 cursor-pointer"
+                    accept="image/*">
             </div>
 
-            <div class="text-right">
+            <div>
+                <label class="block text-sm font-bold text-gray-900 mb-2">Deskripsi</label>
+                <textarea name="deskripsi" rows="4"
+                    class="w-full border border-gray-300 rounded-lg py-2 px-3 focus:ring-2 focus:ring-black focus:border-black transition"
+                    placeholder="Jelaskan tujuan group ini..." required></textarea>
+            </div>
+
+            <div class="pt-4 border-t border-gray-100 flex justify-end">
                 <button type="submit"
-                    class="bg-gray-900 text-white font-bold rounded-full py-2 px-6 hover:bg-gray-700 transition-colors duration-150">
+                    class="bg-black text-white font-bold rounded-full py-2.5 px-8 hover:bg-gray-800 transition shadow-lg transform hover:-translate-y-0.5">
                     Buat Group
                 </button>
             </div>
