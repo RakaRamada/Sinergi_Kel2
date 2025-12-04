@@ -1,31 +1,46 @@
 <?php
 // File: app/controllers/SearchController.php
 
+require_once __DIR__ . '/../../config/koneksi.php';
 require_once __DIR__ . '/../models/GroupModel.php';
-require_once __DIR__ . '/../models/UserModel.php';
+require_once __DIR__ . '/../models/UserModel.php'; 
 
-function showSearchPage() {
-    if (session_status() === PHP_SESSION_NONE) session_start();
+class SearchController {
     
-    $currentTab = $_GET['tab'] ?? 'group'; 
-    $query = $_GET['q'] ?? ''; 
-    $user_id = (int)($_SESSION['user_id'] ?? 0); 
+    private $conn;
+    private $groupModel;
+    private $userModel; 
 
-    // MODIFIKASI: Default search (%%) jika query kosong
-    // Agar user langsung melihat daftar grup saat membuka halaman
-    $searchTerm = empty($query) ? '' : $query;
-
-    $group_results = [];
-    $user_results = [];
-
-    if ($currentTab === 'group') {
-        // Cari grup (Kalau kosong, dia akan menampilkan semua karena LIKE '%%')
-        $group_results = searchGroups($searchTerm, $user_id); 
-    } elseif ($currentTab === 'orang') {
-        // Cari user
-        $user_results = searchUsers($searchTerm); 
+    public function __construct($dbConnection) {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        $this->conn = $dbConnection;
+        
+        // Inisialisasi Model sebagai Object
+        $this->groupModel = new GroupModel($dbConnection);
+        $this->userModel  = new UserModel($dbConnection);
     }
 
-    require 'app/views/search.php';
+    public function showSearchPage() {
+        $currentTab = $_GET['tab'] ?? 'group'; 
+        $query = $_GET['q'] ?? ''; 
+        
+        // Ambil Data User Session
+        $user_id = (int)($_SESSION['user_id'] ?? 0); 
+        $role_id = (int)($_SESSION['role_id'] ?? 0); // <-- TAMBAHKAN INI
+
+        $searchTerm = empty($query) ? '' : $query;
+
+        $group_results = [];
+        $user_results = [];
+
+        if ($currentTab === 'group') {
+            $group_results = $this->groupModel->searchGroups($searchTerm, $user_id); 
+        } elseif ($currentTab === 'orang') {
+            $user_results = $this->userModel->searchUsers($searchTerm); 
+        }
+
+        // Variabel $role_id akan otomatis terkirim ke view karena scope function
+        require __DIR__ . '/../views/search.php';
+    }
 }
 ?>

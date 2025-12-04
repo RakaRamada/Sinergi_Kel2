@@ -2,8 +2,10 @@
 
     <div
         class="sticky top-0 z-30 bg-white/90 backdrop-blur-sm border-b border-gray-200 px-4 py-3 flex items-center gap-4 shadow-sm">
-        <a href="index.php?page=messages" class="p-2 rounded-full hover:bg-gray-100 transition text-gray-600 group"
-            title="Daftar Grup">
+        <?php $backLink = (isset($_GET['from']) && $_GET['from'] == 'search') ? 'index.php?page=search' : 'index.php?page=messages'; ?>
+
+        <a href="<?= $backLink ?>" class="p-2 rounded-full hover:bg-gray-100 transition text-gray-600 group"
+            title="Kembali">
             <svg class="w-6 h-6 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor"
                 viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18">
@@ -18,10 +20,16 @@
 
             <div class="relative pt-8 pb-6 md:flex items-end gap-8">
                 <?php
+                    // Setup Data Tampilan
                     $g_img = !empty($group_info['group_image']) 
                         ? '/Sinergi/public/uploads/group_profiles/' . htmlspecialchars($group_info['group_image']) 
                         : '/Sinergi/public/assets/images/user.png';
+                    
+                    // Pastikan variable role aman (dikirim dari Controller)
+                    $is_owner = (isset($myRole) && $myRole === 'owner');
+                    $is_admin = (isset($myRole) && $myRole === 'admin');
                 ?>
+
                 <div class="shrink-0 relative">
                     <img src="<?= $g_img ?>"
                         class="w-32 h-32 md:w-44 md:h-44 rounded-2xl object-cover border-4 border-white shadow-lg bg-gray-200">
@@ -29,7 +37,8 @@
 
                 <div class="flex-1 mb-2 mt-4 md:mt-0">
                     <h1 class="text-3xl md:text-4xl font-extrabold text-gray-900 leading-tight mb-2">
-                        <?= htmlspecialchars($group_info['nama_group']) ?></h1>
+                        <?= htmlspecialchars($group_info['nama_group']) ?>
+                    </h1>
 
                     <div class="flex flex-wrap items-center text-sm text-gray-500 gap-4">
                         <?php if($group_info['is_private']): ?>
@@ -52,27 +61,36 @@
                         </div>
                         <?php endif; ?>
 
+                        <?php if(!$is_locked): ?>
                         <div class="flex items-center gap-1.5">
                             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0z">
                                 </path>
                             </svg>
-                            <span><?= count($group_members) ?> Anggota</span>
+                            <span><?= isset($group_members) ? count($group_members) : 0 ?> Anggota</span>
                         </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
                 <div class="flex gap-3 mb-2 shrink-0">
-                    <?php if ($is_creator): ?>
+                    <?php if ($is_member): ?>
+                    <?php if ($can_manage): ?>
                     <a href="index.php?page=edit-group&group_id=<?= $group_info['group_id'] ?>"
-                        class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-xl text-sm transition">Edit
-                        Grup</a>
-                    <?php else: ?>
-                    <a href="index.php?page=exit-group&group_id=<?= $group_info['group_id'] ?>"
-                        onclick="return confirm('Keluar dari grup?')"
-                        class="px-5 py-2.5 bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-800 font-bold rounded-xl text-sm transition">Keluar</a>
+                        class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-xl text-sm transition">
+                        Edit Grup
+                    </a>
                     <?php endif; ?>
+
+                    <?php if (!$is_owner): ?>
+                    <a href="index.php?page=exit-group&group_id=<?= $group_info['group_id'] ?>"
+                        onclick="return confirm('Yakin ingin keluar dari grup?')"
+                        class="px-5 py-2.5 bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-800 font-bold rounded-xl text-sm transition">
+                        Keluar
+                    </a>
+                    <?php endif; ?>
+
                     <a href="index.php?page=messages&group_id=<?= $group_info['group_id'] ?>"
                         class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition flex items-center gap-2 shadow-md shadow-blue-200">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -82,9 +100,29 @@
                         </svg>
                         Chat
                     </a>
+
+                    <?php else: ?>
+                    <?php if ($group_info['is_private']): ?>
+                    <a href="index.php?page=join-group&group_id=<?= $group_info['group_id'] ?>"
+                        class="px-6 py-2.5 bg-black hover:bg-gray-800 text-white font-bold rounded-xl text-sm transition flex items-center gap-2 shadow-lg">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z">
+                            </path>
+                        </svg>
+                        Request Join
+                    </a>
+                    <?php else: ?>
+                    <a href="index.php?page=join-group&group_id=<?= $group_info['group_id'] ?>"
+                        class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition shadow-lg shadow-blue-200">
+                        Gabung Grup
+                    </a>
+                    <?php endif; ?>
+                    <?php endif; ?>
                 </div>
             </div>
 
+            <?php if (!$is_locked): ?>
             <div class="flex items-center gap-6 mt-6 overflow-x-auto">
                 <?php 
                     $view = $_GET['view'] ?? 'diskusi';
@@ -101,6 +139,7 @@
                 <a href="index.php?page=group-details&group_id=<?= $group_id ?>&view=files"
                     class="<?= $tab_base ?> <?= $view=='files' ? $tab_active : $tab_inactive ?>">File</a>
             </div>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -108,6 +147,33 @@
 
         <div class="lg:col-span-2 space-y-6">
 
+            <?php if ($is_locked): ?>
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
+                <div class="w-24 h-24 mx-auto mb-6 bg-gray-50 rounded-full flex items-center justify-center">
+                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z">
+                        </path>
+                    </svg>
+                </div>
+                <h3 class="text-2xl font-bold text-gray-900 mb-3">Grup Privat</h3>
+                <p class="text-gray-500 max-w-md mx-auto leading-relaxed">
+                    Grup ini bersifat pribadi. Hanya anggota yang disetujui yang dapat melihat diskusi, daftar anggota,
+                    dan file yang dibagikan.
+                </p>
+                <div class="mt-8">
+                    <a href="index.php?page=join-group&group_id=<?= $group_info['group_id'] ?>"
+                        class="inline-flex items-center gap-2 px-6 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition shadow-lg">
+                        Ajukan Bergabung
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+
+            <?php else: ?>
             <?php if($view == 'diskusi'): ?>
             <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 text-center">
                 <div class="w-20 h-20 mx-auto mb-4 bg-blue-50 rounded-full flex items-center justify-center">
@@ -127,20 +193,17 @@
             <?php endif; ?>
 
             <?php if($view == 'members'): ?>
-
             <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                 <div class="p-5 border-b border-gray-100 flex justify-between items-center">
                     <h3 class="font-bold text-gray-800 text-lg">Anggota Grup</h3>
-
-                    <?php if ($is_creator): ?>
+                    <?php if ($can_manage): ?>
                     <button onclick="openAddMemberModal()"
                         class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-full font-bold hover:bg-blue-700 transition shadow flex items-center gap-1.5 cursor-pointer">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z">
                             </path>
-                        </svg>
-                        Undang
+                        </svg> Undang
                     </button>
                     <?php endif; ?>
                 </div>
@@ -154,25 +217,50 @@
                             <div>
                                 <div class="flex items-center gap-2">
                                     <p class="font-bold text-gray-900"><?= htmlspecialchars($gm['nama_lengkap']) ?></p>
-                                    <?php if($gm['user_id'] == $group_info['created_by_user_id']): ?>
+                                    <?php if($gm['group_role'] === 'owner'): ?>
                                     <span
-                                        class="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded border border-green-200 font-bold uppercase tracking-wider">Admin</span>
+                                        class="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded border border-yellow-200 font-bold uppercase">OWNER</span>
+                                    <?php elseif($gm['group_role'] === 'admin'): ?>
+                                    <span
+                                        class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200 font-bold uppercase">ADMIN</span>
                                     <?php endif; ?>
                                 </div>
                                 <p class="text-sm text-gray-500">@<?= htmlspecialchars($gm['username']) ?></p>
                             </div>
                         </div>
-                        <?php if($is_creator && $gm['user_id'] != $group_info['created_by_user_id']): ?>
-                        <button
-                            onclick="kickUser(<?= $gm['user_id'] ?>, '<?= htmlspecialchars($gm['nama_lengkap']) ?>')"
-                            class="text-gray-300 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition rounded-full hover:bg-red-50"
-                            title="Keluarkan Anggota"><svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6">
-                                </path>
-                            </svg></button>
-                        <?php endif; ?>
+                        <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                            <?php if ($is_owner && $gm['user_id'] != $_SESSION['user_id']): ?>
+                            <form action="index.php?page=change-role" method="POST" class="inline">
+                                <input type="hidden" name="group_id" value="<?= $group_id ?>">
+                                <input type="hidden" name="target_user_id" value="<?= $gm['user_id'] ?>">
+                                <?php if (($gm['group_role'] ?? 'member') === 'member'): ?>
+                                <input type="hidden" name="action" value="promote">
+                                <button type="submit"
+                                    class="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 font-medium">▲
+                                    Admin</button>
+                                <?php elseif (($gm['group_role'] ?? 'member') === 'admin'): ?>
+                                <input type="hidden" name="action" value="demote">
+                                <button type="submit"
+                                    class="text-xs bg-orange-50 text-orange-600 px-2 py-1 rounded border border-orange-200 font-medium">▼
+                                    Member</button>
+                                <?php endif; ?>
+                            </form>
+                            <?php endif; ?>
+
+                            <?php 
+                                            $canKick = ($is_owner && $gm['user_id'] != $_SESSION['user_id']) || ($is_admin && ($gm['group_role'] ?? 'member') === 'member');
+                                            if($canKick): 
+                                        ?>
+                            <button
+                                onclick="kickUser(<?= $gm['user_id'] ?>, '<?= htmlspecialchars($gm['nama_lengkap']) ?>')"
+                                class="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition"><svg
+                                    class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6">
+                                    </path>
+                                </svg></button>
+                            <?php endif; ?>
+                        </div>
                     </div>
                     <?php endforeach; ?>
                 </div>
@@ -189,7 +277,6 @@
                         class="aspect-square bg-gray-100 rounded-xl overflow-hidden block relative group shadow-sm hover:shadow-md transition">
                         <img src="/Sinergi/public/uploads/group_files/<?= $m['file_path'] ?>"
                             class="w-full h-full object-cover group-hover:scale-110 transition duration-500">
-                        <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition"></div>
                     </a>
                     <?php endforeach; ?>
                 </div>
@@ -221,11 +308,6 @@
                             <p class="text-sm text-gray-500 mt-0.5"><?= $d['sender_nama'] ?> •
                                 <?= $d['created_at_formatted'] ?></p>
                         </div>
-                        <svg class="w-5 h-5 text-gray-300 group-hover:text-blue-500" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                        </svg>
                     </a>
                     <?php endforeach; ?>
                     <?php if (empty($group_documents)): ?>
@@ -237,6 +319,7 @@
             </div>
             <?php endif; ?>
 
+            <?php endif; // END IF IS_LOCKED ?>
         </div>
 
         <div class="lg:col-span-1 space-y-6">
@@ -245,7 +328,7 @@
                 <h3 class="font-bold text-gray-900 text-lg mb-4">Tentang Grup</h3>
                 <?php 
                     $deskripsi_clean = 'Tidak ada deskripsi.';
-                    if($group_info['deskripsi']) {
+                    if(!empty($group_info['deskripsi'])) {
                         $raw = $group_info['deskripsi'];
                         $deskripsi_clean = ($raw instanceof OCILob) ? $raw->read($raw->size()) : $raw;
                     }
@@ -274,7 +357,7 @@
                 </div>
             </div>
 
-            <?php if ($is_creator && !empty($pending_members)): ?>
+            <?php if ($can_manage && !empty($pending_members) && !$is_locked): ?>
             <div class="bg-blue-50 rounded-2xl border border-blue-100 p-5 shadow-sm">
                 <h4 class="font-bold text-blue-800 mb-1">Butuh Persetujuan</h4>
                 <p class="text-sm text-blue-600 mb-4 opacity-80">Ada <?= count($pending_members) ?> orang ingin
@@ -309,16 +392,13 @@
             <?php endif; ?>
 
         </div>
-
     </div>
-
 </div>
 
 <div id="addMemberModal" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onclick="closeAddMemberModal()"></div>
     <div
         class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col h-[600px]">
-
         <div class="bg-blue-600 text-white px-4 py-3 flex items-center space-x-3">
             <button onclick="closeAddMemberModal()"
                 class="hover:bg-white/20 p-1 rounded-full transition cursor-pointer">
@@ -329,7 +409,6 @@
             </button>
             <h3 class="font-bold text-lg">Undang Teman</h3>
         </div>
-
         <div class="p-3 border-b border-gray-100">
             <div class="relative">
                 <input type="text" id="searchCandidateInput" placeholder="Cari nama teman..." autocomplete="off"
@@ -341,7 +420,6 @@
                 </svg>
             </div>
         </div>
-
         <div class="flex-1 overflow-y-auto p-2" id="candidatesList">
             <div id="loadingSpinner" class="hidden flex justify-center py-8">
                 <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none"
@@ -391,7 +469,7 @@
 </form>
 
 <script>
-// --- LOGIKA UNDANG ANGGOTA ---
+// --- LOGIKA MODAL UNDANG ---
 const modal = document.getElementById('addMemberModal');
 const searchInput = document.getElementById('searchCandidateInput');
 const resultsContainer = document.getElementById('resultsContainer');

@@ -95,7 +95,7 @@ if (!function_exists('formatTanggalChat')) {
                 // Kita perlu data postingan dulu dari Controller/Model
                 // (Cara cepat: Panggil Helper Controller di sini)
                 require_once __DIR__ . '/../controllers/ForumController.php';
-                $forum_posts = getForumTabData($current_group_id);
+                // $forum_posts = getForumTabData($current_group_id);
                 
                 require 'partials/tab_forum.php';
             }

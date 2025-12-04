@@ -1,6 +1,6 @@
 <?php
 // File: app/views/partials/tab_chat.php
-// VERSI FIX FINAL: Flexbox Layout (Input Statis), Clean Spacing
+// VERSI FINAL: Logic Reply Dokumen, Modal Hapus, Struktur Rapih
 
 $group_id = $current_group_id; 
 $last_message_id = 0;
@@ -9,7 +9,7 @@ if (isset($messages) && !empty($messages)) {
 }
 ?>
 
-<div class="flex flex-col h-full bg-gray-100 relative" onclick="closeAllDropdowns(event)">
+<div class="flex flex-col h-full bg-gray-100 relative">
 
     <div id="chat-box" class="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar"
         data-last-message-id="<?= $last_message_id ?>">
@@ -17,7 +17,7 @@ if (isset($messages) && !empty($messages)) {
         <?php if (isset($messages) && is_array($messages) && !empty($messages)): ?>
         <?php foreach ($messages as $i => $message): ?>
         <?php
-            // Logika Tanggal
+            // Logic Tanggal (Separator)
             $tanggal_pesan_ini = formatTanggalChat($message['created_at_iso'] ?? null);
             $tanggal_pesan_sebelumnya = ($i > 0) ? formatTanggalChat($messages[$i-1]['created_at_iso'] ?? null) : null;
 
@@ -32,16 +32,36 @@ if (isset($messages) && !empty($messages)) {
         <?php endif; ?>
 
         <?php 
+            // Variabel Dasar Pesan
             $msg_type = $message['message_type'] ?? 'text';
             $msg_id = $message['message_id'] ?? 0; 
             $sender_id = $message['sender_id'] ?? null;
-            $isi_pesan_string = trim($message['isi_pesan'] ?? ''); // TRIM DISINI
+            $isi_pesan_string = trim($message['isi_pesan'] ?? '');
             $created_at_time = $message['created_at_time'] ?? ''; 
             $sender_nama = $message['sender_nama'] ?? 'User';
             $is_my_message = ($sender_id == $_SESSION['user_id']);
             $file_url = '/Sinergi/public/uploads/group_files/' . ($message['file_path'] ?? '');
 
-            // Pesan Sistem
+            // --- FIX PENTING: LOGIKA TEKS UNTUK REPLY & PREVIEW ---
+            // Tentukan apa teks representasi pesan ini (jika direply nanti)
+            $reply_data_text = $isi_pesan_string;
+            
+            // Jika teks kosong, cek tipe pesan (Gambar/Dokumen)
+            if (empty($reply_data_text)) {
+                if ($msg_type === 'image') {
+                    $reply_data_text = '📷 [Gambar]';
+                } elseif ($msg_type === 'document') {
+                    $docName = $message['original_filename'] ?? 'Dokumen';
+                    $reply_data_text = '📄 ' . $docName;
+                }
+            }
+            
+            // Siapkan variable JS safe
+            $js_reply_text = htmlspecialchars($reply_data_text, ENT_QUOTES);
+            $js_sender_name = htmlspecialchars($sender_nama, ENT_QUOTES);
+            // -----------------------------------------------------
+
+            // Pesan Sistem (Join/Leave) -> Tampilan Beda
             if ($msg_type === 'join' || $msg_type === 'leave'):
         ?>
         <div class="flex justify-center my-2">
@@ -52,7 +72,7 @@ if (isset($messages) && !empty($messages)) {
         <?php continue; endif; ?>
 
         <?php
-            // Style Bubble
+            // Style Bubble (Kanan/Kiri)
             if ($is_my_message) {
                 $align_class = 'justify-end';
                 $bubble_class = 'bg-black text-white rounded-l-xl rounded-br-xl rounded-tr-none shadow-sm';
@@ -68,10 +88,6 @@ if (isset($messages) && !empty($messages)) {
                 $sender_html = '<p class="text-[11px] font-bold mb-0.5 text-orange-600 leading-none">'.htmlspecialchars($sender_nama).'</p>';
                 $reply_bg = 'bg-gray-100 border-gray-300';
             }
-
-            $reply_data_text = ($msg_type === 'text') ? $isi_pesan_string : ($message['original_filename'] ?? 'File');
-            $js_reply_text = htmlspecialchars($reply_data_text, ENT_QUOTES);
-            $js_sender_name = htmlspecialchars($sender_nama, ENT_QUOTES);
         ?>
 
         <div class="flex <?= $align_class ?> group/msg relative w-full" id="message-<?= $msg_id ?>">
@@ -86,6 +102,7 @@ if (isset($messages) && !empty($messages)) {
 
                 <div id="menu-<?= $msg_id ?>"
                     class="hidden absolute top-6 right-0 bg-white shadow-xl rounded-lg border border-gray-100 w-32 z-50 overflow-hidden py-1 message-dropdown">
+
                     <button
                         onclick="handleReply(<?= $msg_id ?>, '<?= $js_sender_name ?>', '<?= substr($js_reply_text, 0, 50) ?>')"
                         class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
@@ -95,8 +112,9 @@ if (isset($messages) && !empty($messages)) {
                         </svg>
                         Balas
                     </button>
+
                     <?php if ($is_my_message): ?>
-                    <button onclick="handleDelete(<?= $msg_id ?>)"
+                    <button onclick="openDeleteModal(<?= $msg_id ?>)"
                         class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -112,11 +130,21 @@ if (isset($messages) && !empty($messages)) {
                     <?= $sender_html ?>
 
                     <?php if (!empty($message['reply_to_message_id'])): ?>
-                    <div class="mb-1 rounded p-1 text-[10px] border-l-2 <?= $reply_bg ?> opacity-90">
+                    <?php 
+                            // Teks Pesan Asli yang dibalas
+                            $repText = $message['replied_message_text']; 
+                            
+                            // Jika teks asli kosong (misal yang dibalas itu Gambar/Doc), kita labeli manual
+                            if (empty(trim($repText))) {
+                                $rType = $message['replied_message_type'] ?? 'text';
+                                if ($rType === 'image') $repText = '📷 [Gambar]';
+                                elseif ($rType === 'document') $repText = '📄 ' . ($message['replied_filename'] ?? 'Dokumen');
+                            }
+                        ?>
+                    <div class="mb-1 rounded p-1 text-[10px] border-l-2 <?= $reply_bg ?> opacity-90 bg-opacity-50">
                         <span
                             class="font-bold block text-blue-500"><?= htmlspecialchars($message['replied_sender_nama']) ?></span>
-                        <span
-                            class="truncate block opacity-80"><?= htmlspecialchars($message['replied_message_text']) ?></span>
+                        <span class="truncate block opacity-80"><?= htmlspecialchars($repText) ?></span>
                     </div>
                     <?php endif; ?>
 
@@ -146,6 +174,7 @@ if (isset($messages) && !empty($messages)) {
                     <p class="text-sm <?= $text_color ?> leading-snug whitespace-normal break-words">
                         <?= nl2br(htmlspecialchars($isi_pesan_string)) ?></p>
                     <?php endif; ?>
+
                     <div class="text-[9px] <?= $time_color ?> self-end mt-0.5 leading-none select-none">
                         <?= htmlspecialchars($created_at_time) ?>
                     </div>
@@ -160,16 +189,19 @@ if (isset($messages) && !empty($messages)) {
         <?php endif; ?>
     </div>
 
-    <div class="w-full bg-white border-t border-gray-200 px-3 py-2 z-20 shrink-0">
+    <div class="w-full bg-white border-t border-gray-200 px-3 py-2 z-20 shrink-0 relative">
 
         <div id="reply-preview-area"
             class="hidden absolute bottom-full left-0 w-full bg-gray-50 border-t border-gray-200 p-2 shadow-sm z-10">
         </div>
+
         <div id="file-preview-area"
             class="hidden absolute bottom-full left-4 mb-2 bg-white p-1 rounded-lg shadow-lg border z-20"></div>
 
         <form id="chat-form" method="POST" class="flex items-end gap-2" enctype="multipart/form-data">
             <input type="hidden" name="forum_id" value="<?= $group_id ?>">
+
+            <input type="hidden" name="reply_to_message_id" id="reply-input-id" value="">
 
             <label id="attach-btn"
                 class="p-2 text-gray-500 hover:bg-gray-100 rounded-full cursor-pointer transition shrink-0">
@@ -198,56 +230,34 @@ if (isset($messages) && !empty($messages)) {
     </div>
 </div>
 
-<script>
-// Fungsi Toggle Dropdown
-function toggleMessageMenu(event, menuId) {
-    event.stopPropagation();
-    document.querySelectorAll('.message-dropdown').forEach(el => {
-        if (el.id !== menuId) el.classList.add('hidden');
-    });
-    const menu = document.getElementById(menuId);
-    if (menu) menu.classList.toggle('hidden');
-}
+<div id="deleteModal"
+    class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm transition-opacity">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform scale-100 transition-transform">
+        <div class="text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            </div>
+            <h3 class="text-lg leading-6 font-bold text-gray-900" id="modal-title">Hapus Pesan?</h3>
+            <div class="mt-2">
+                <p class="text-sm text-gray-500">
+                    Pesan ini akan dihapus secara permanen dan tidak dapat dikembalikan.
+                </p>
+            </div>
+        </div>
+        <div class="mt-5 sm:mt-6 flex gap-3">
+            <button type="button" onclick="closeDeleteModal()"
+                class="w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:text-sm transition">
+                Batal
+            </button>
+            <button type="button" id="confirmDeleteBtn"
+                class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:text-sm transition">
+                Hapus
+            </button>
+        </div>
+    </div>
+</div>
 
-function closeAllDropdowns(event) {
-    document.querySelectorAll('.message-dropdown').forEach(el => {
-        el.classList.add('hidden');
-    });
-}
-
-// Fungsi Trigger Reply
-function handleReply(msgId, sender, text) {
-    if (typeof showReplyPreview === 'function') {
-        showReplyPreview({
-            id: msgId,
-            name: sender,
-            text: text
-        });
-        document.getElementById('message-input').focus();
-    }
-}
-
-// Fungsi Trigger Delete
-function handleDelete(msgId) {
-    if (confirm('Hapus pesan ini?')) {
-        fetch('index.php?page=delete-message', {
-            method: 'POST',
-            body: JSON.stringify({
-                message_id: msgId
-            })
-        }).then(r => r.json()).then(d => {
-            if (d.success) {
-                document.getElementById('message-' + msgId).remove();
-            } else {
-                alert('Gagal hapus');
-            }
-        });
-    }
-}
-
-// === SCROLL OTOMATIS KE BAWAH ===
-document.addEventListener("DOMContentLoaded", function() {
-    const box = document.getElementById('chat-box');
-    if (box) box.scrollTop = box.scrollHeight;
-});
-</script>
+<script src="/Sinergi/public/assets/js/chat_app.js?v=<?= time() ?>"></script>

@@ -1,4 +1,7 @@
 <?php
+// File: app/controllers/PostingController.php
+// VERSI FINAL: FITUR DELETE COMMENT SUDAH AKTIF
+
 require_once __DIR__ . '/../../config/koneksi.php'; 
 require_once __DIR__ . '/../models/PostModel.php';
 require_once __DIR__ . '/../models/ReportModel.php'; 
@@ -8,50 +11,37 @@ class PostingController {
     private $conn; 
     private $postModel;
     private $reportModel; 
-    private $defaultAvatar;
+    
+    // Path Default
+    private $defaultAvatar = '/sinergi/public/assets/images/user.png';
+    private $avatarUploadPath = '/sinergi/public/uploads/avatars/';
 
     public function __construct($dbConnection) {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+        if (session_status() === PHP_SESSION_NONE) session_start();
         $this->conn = $dbConnection;
         $this->postModel = new PostModel($dbConnection);
         $this->reportModel = new ReportModel($dbConnection);
-        $this->defaultAvatar = '/Sinergi/public/assets/images/user.png';
     }
 
-    // --- HELPER AGAR JSON TIDAK ERROR ---
+    private function fixAvatarPath($url) {
+        if (empty($url)) return $this->defaultAvatar;
+        if (strpos($url, '/') !== false) return $url; 
+        return $this->avatarUploadPath . $url;
+    }
+
     private function sendJson($data) {
-        // CRITICAL FIX: Bersihkan SEMUA output buffer
-        while (ob_get_level()) {
-            ob_end_clean();
-        }
-        
-        // Matikan error display
+        while (ob_get_level()) ob_end_clean();
         ini_set('display_errors', 0);
-        
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($data);
         exit;
     }
 
-    // --- FUNGSI TAMPILAN ---
-
+    // --- VIEW METHODS ---
     public function showDashboard() {
         if (session_status() === PHP_SESSION_NONE) session_start();
         $user_id = $_SESSION['user_id'] ?? null;
-
-        if (!$user_id) {
-            header('Location: index.php?page=login');
-            exit();
-        }
-
-        if (function_exists('getRecommendedUsers')) {
-            $recommendedUsers = getRecommendedUsers($user_id, $this->conn); 
-        } else {
-            $recommendedUsers = [];
-        }
-
+        if (!$user_id) { header('Location: index.php?page=login'); exit(); }
         require 'app/views/dashboard.php';
     }
 
@@ -59,24 +49,21 @@ class PostingController {
         $post_id = isset($_GET['id']) ? $_GET['id'] : 0;
         
         if ($post_id == 0) {
-            echo "<div class='p-4 text-red-500 font-bold'>Error: ID Postingan tidak valid.</div>";
-            return;
+            echo "<div class='p-4 text-red-500 font-bold'>Error: ID Postingan tidak valid.</div>"; return;
         }
         
         $post = $this->postModel->getPostById($post_id);
         
         if(!$post){
             require 'app/views/dashboard.php';
-            echo "<div class='container mx-auto p-4 mt-4 bg-white rounded shadow text-center'>Postingan tidak ditemukan atau telah dihapus.</div>";
-            return;
+            echo "<div class='container mx-auto p-4 mt-4 bg-white rounded shadow text-center'>Postingan tidak ditemukan.</div>"; return;
         }
 
-        $post['AVATAR_URL_FIXED'] = (!empty($post['AVATAR_URL']) && strlen($post['AVATAR_URL']) > 5) 
-                                    ? $post['AVATAR_URL'] : $this->defaultAvatar;
+        $post['AVATAR_URL_FIXED'] = $this->fixAvatarPath($post['AVATAR_URL']);
         $post['POST_IMAGE'] = $post['POST_IMAGE'] ?? '';
 
         if (!empty($post['WAKTU_FIX'])) {
-            $post['WAKTU_POSTING'] = date('H:i \Â· d M Y', strtotime($post['WAKTU_FIX'])); 
+            $post['WAKTU_POSTING'] = date('H:i | d M Y', strtotime($post['WAKTU_FIX'])); 
         } else {
             $post['WAKTU_POSTING'] = '-';
         }
@@ -88,16 +75,13 @@ class PostingController {
         $comments = [];
 
         foreach ($rawComments as $c) {
-            $c['AVATAR_URL_FIXED'] = (!empty($c['AVATAR_URL']) && strlen($c['AVATAR_URL']) > 5) 
-                                     ? $c['AVATAR_URL'] : $this->defaultAvatar;
+            $c['AVATAR_URL_FIXED'] = $this->fixAvatarPath($c['AVATAR_URL']);
             $c['WAKTU_KOMEN'] = !empty($c['WAKTU_FIX']) ? date('d M H:i', strtotime($c['WAKTU_FIX'])) : 'Baru saja';
-
+            
             $rawReplies = $this->postModel->getReplies($c['COMMENT_ID']);
             $c['REPLIES'] = [];
-
             foreach ($rawReplies as $r) {
-                $r['AVATAR_URL_FIXED'] = (!empty($r['AVATAR_URL']) && strlen($r['AVATAR_URL']) > 5) 
-                                         ? $r['AVATAR_URL'] : $this->defaultAvatar;
+                $r['AVATAR_URL_FIXED'] = $this->fixAvatarPath($r['AVATAR_URL']);
                 $r['WAKTU_KOMEN'] = !empty($r['WAKTU_FIX']) ? date('d M H:i', strtotime($r['WAKTU_FIX'])) : 'Baru saja';
                 $c['REPLIES'][] = $r;
             }
@@ -107,7 +91,7 @@ class PostingController {
         require __DIR__ . '/../views/post_detail.php';
     }
 
-    // --- FUNGSI API (CRUD) ---
+    // --- API METHODS ---
 
     public function getPostings() {
         $userId = $_SESSION['user_id'] ?? 0;
@@ -116,11 +100,8 @@ class PostingController {
         try {
             $posts = $this->postModel->getAllPosts($userId);
             $formatted = [];
-            
             foreach ($posts as $row) {
-                $row['AVATAR_URL_FIXED'] = (empty($row['AVATAR_URL']) || strlen($row['AVATAR_URL']) <= 5) 
-                                            ? $this->defaultAvatar : $row['AVATAR_URL'];
-
+                $row['AVATAR_URL_FIXED'] = $this->fixAvatarPath($row['AVATAR_URL']);
                 $timestamp = strtotime($row['CREATED_AT_STR']); 
                 if ($timestamp) {
                     $diff = time() - $timestamp;
@@ -141,30 +122,21 @@ class PostingController {
 
     public function createPost() {
         if (!isset($_SESSION['user_id'])) $this->sendJson(['status' => 'error', 'message' => 'Belum login']);
-
         $user_id = $_SESSION['user_id'];
         $konten = isset($_POST['konten']) ? trim($_POST['konten']) : '';
         $has_image = (isset($_FILES['post_image']) && $_FILES['post_image']['error'] === UPLOAD_ERR_OK);
 
-        if (empty($konten) && !$has_image) {
-            $this->sendJson(['status' => 'error', 'message' => 'Konten kosong']);
-        }
+        if (empty($konten) && !$has_image) $this->sendJson(['status' => 'error', 'message' => 'Konten kosong']);
 
         $post_image_db = null;
         if ($has_image) {
             $upload_dir = __DIR__ . '/../../public/assets/uploads/'; 
             if (!file_exists($upload_dir)) mkdir($upload_dir, 0777, true);
-
             $file_ext = strtolower(pathinfo($_FILES['post_image']['name'], PATHINFO_EXTENSION));
-            if (!in_array($file_ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
-                $this->sendJson(['status' => 'error', 'message' => 'Format gambar salah']);
-            }
-
+            if (!in_array($file_ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) $this->sendJson(['status' => 'error', 'message' => 'Format salah']);
             $new_file_name = time() . '_' . uniqid() . '.' . $file_ext;
             if (move_uploaded_file($_FILES['post_image']['tmp_name'], $upload_dir . $new_file_name)) {
                 $post_image_db = '/Sinergi/public/assets/uploads/' . $new_file_name;
-            } else {
-                $this->sendJson(['status' => 'error', 'message' => 'Gagal upload']);
             }
         }
 
@@ -178,12 +150,10 @@ class PostingController {
 
     public function toggleLike() {
         if (!isset($_SESSION['user_id'])) $this->sendJson(['status' => 'error', 'message' => 'Login required']);
-        
         $post_id = $_POST['post_id'] ?? 0;
         $result = $this->postModel->toggleLike($_SESSION['user_id'], $post_id);
-
         if ($result) {
-            $this->sendJson(['status' => 'success', 'action' => $result['action'], 'new_like_count' => $result['new_count']]);
+            $this->sendJson(['status' => 'success', 'action' => $result['action'], 'new_count' => $result['new_count']]);
         } else {
             $this->sendJson(['status' => 'error', 'message' => 'Failed to like']);
         }
@@ -191,79 +161,44 @@ class PostingController {
 
     public function addComment() {
         if (!isset($_SESSION['user_id'])) $this->sendJson(['status' => 'error', 'message' => 'Login required']);
-
         $post_id = $_POST['post_id'] ?? 0;
         $isi = trim($_POST['isi_komen'] ?? '');
         $parent_id = !empty($_POST['parent_comment_id']) ? intval($_POST['parent_comment_id']) : null;
-        
         if (empty($isi) || $post_id == 0) $this->sendJson(['status' => 'error', 'message' => 'Data tidak lengkap']);
-
-        $newCommentId = $this->postModel->addComment($_SESSION['user_id'], $post_id, $isi, $parent_id);
-
-        if ($newCommentId) {
-            $this->sendJson(['status' => 'success', 'message' => 'Komentar terkirim']);
-        } else {
-            $this->sendJson(['status' => 'error', 'message' => 'Gagal menyimpan komentar']);
-        }
+        $newId = $this->postModel->addComment($_SESSION['user_id'], $post_id, $isi, $parent_id);
+        if ($newId) $this->sendJson(['status' => 'success']);
+        else $this->sendJson(['status' => 'error', 'message' => 'Gagal simpan']);
     }
 
+    // --- FITUR YANG SEBELUMNYA KOSONG, SEKARANG DIAKTIFKAN ---
     public function deleteComment() {
-        if (!isset($_SESSION['user_id'])) $this->sendJson(['status' => 'error', 'message' => 'Login required']);
-
-        $cid = $_POST['comment_id'] ?? 0;
-        $uid = $_SESSION['user_id'];
-
-        if (empty($cid)) $this->sendJson(['status' => 'error', 'message' => 'Invalid ID']);
-
-        $sql_cek = "SELECT POST_ID FROM comments WHERE COMMENT_ID = :b_id AND USER_ID = :b_user";
-        $stmt_cek = oci_parse($this->conn, $sql_cek);
-        oci_bind_by_name($stmt_cek, ':b_id', $cid);
-        oci_bind_by_name($stmt_cek, ':b_user', $uid);
-        oci_execute($stmt_cek);
-        $row = oci_fetch_assoc($stmt_cek);
-
-        if(!$row) {
-            oci_free_statement($stmt_cek);
-            $this->sendJson(['status' => 'error', 'message' => 'Komentar tidak ditemukan atau bukan milik Anda']);
-        }
-
-        $pid = $row['POST_ID'];
-
-        $sql_del = "DELETE FROM comments WHERE COMMENT_ID = :b_id";
-        $stmt_del = oci_parse($this->conn, $sql_del);
-        oci_bind_by_name($stmt_del, ':b_id', $cid);
-
-        if(oci_execute($stmt_del, OCI_COMMIT_ON_SUCCESS)){
-            $sql_dec = "UPDATE postingan SET comment_count = comment_count - 1 WHERE post_id = :b_post";
-            $stmt_dec = oci_parse($this->conn, $sql_dec);
-            oci_bind_by_name($stmt_dec, ':b_post', $pid);
-            oci_execute($stmt_dec, OCI_COMMIT_ON_SUCCESS);
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id'])) {
             
-            $this->sendJson(['status' => 'success', 'message' => 'Dihapus']);
+            $comment_id = (int)$_POST['comment_id'];
+            $user_id = (int)$_SESSION['user_id'];
+
+            // Panggil Model
+            $success = $this->postModel->deleteComment($comment_id, $user_id);
+
+            if ($success) {
+                $this->sendJson(['status' => 'success']);
+            } else {
+                $this->sendJson(['status' => 'error', 'message' => 'Gagal menghapus atau bukan milik Anda']);
+            }
         } else {
-            $e = oci_error($stmt_del);
-            $this->sendJson(['status' => 'error', 'message' => 'DB Error: ' . $e['message']]);
+            $this->sendJson(['status' => 'error', 'message' => 'Unauthorized'], 401);
         }
     }
 
     public function deletePost() {
-        // CRITICAL: Stop semua output sebelum JSON
-        if (!isset($_SESSION['user_id'])) {
-            $this->sendJson(['status' => 'error', 'message' => 'Login required']);
-        }
-
+        if (!isset($_SESSION['user_id'])) $this->sendJson(['status' => 'error', 'message' => 'Login required']);
         $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
         $uid = intval($_SESSION['user_id']);
-
-        if (empty($post_id)) {
-            $this->sendJson(['status' => 'error', 'message' => 'Invalid ID']);
-        }
+        if (empty($post_id)) $this->sendJson(['status' => 'error', 'message' => 'Invalid ID']);
 
         try {
             $result = $this->postModel->deletePost($post_id, $uid);
-
             if ($result['status']) {
-                // Hapus gambar fisik jika ada
                 if (!empty($result['image_path'])) {
                     $target_dir = __DIR__ . '/../../public/assets/uploads/';
                     $filename = basename($result['image_path']);
@@ -278,16 +213,13 @@ class PostingController {
             $this->sendJson(['status' => 'error', 'message' => 'Server Error: ' . $e->getMessage()]);
         }
     }
-
+    
     public function addReport() {
         if (!isset($_SESSION['user_id'])) $this->sendJson(['status' => 'error', 'message' => 'Login required']);
-        
         try {
             $post_id = $_POST['post_id'] ?? null;
             $reason = $_POST['reason'] ?? null;
-            
             if (!$post_id || !$reason) throw new Exception("Data tidak lengkap");
-        
             $result = $this->reportModel->createReport($post_id, $_SESSION['user_id'], $reason);
             $this->sendJson($result); 
         } catch (Exception $e) {
@@ -295,3 +227,4 @@ class PostingController {
         }
     }
 }
+?>

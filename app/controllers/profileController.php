@@ -1,249 +1,177 @@
 <?php
-// app/controllers/profileController.php
+// File: app/controllers/profileController.php
+// VERSI FINAL FIXED: Mengatasi ORA-01745 (Ganti nama bind variable)
 
 require_once __DIR__ . '/../../config/koneksi.php';
+require_once __DIR__ . '/../models/PostModel.php';
 
 class ProfileController {
-
+    
     private $conn;
-    private $defaultAvatar;
-    private $defaultHeader;
+    private $postModel;
+    private $baseUrlUploads = '/Sinergi/public/uploads/avatars/'; 
+    private $baseUrlAssets  = '/Sinergi/public/assets/images/';
 
     public function __construct($dbConnection) {
-        // Cek sesi saat controller dimulai
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-
-        // Simpan koneksi database ke dalam property class
+        if (session_status() === PHP_SESSION_NONE) session_start();
         $this->conn = $dbConnection;
-
-        // Set default paths
-        $this->defaultAvatar = '/Sinergi/public/assets/images/user.png';
-        $this->defaultHeader = '/Sinergi/public/assets/images/default-header.jpg';
+        $this->postModel = new PostModel($dbConnection);
     }
 
-    // ------------------------------
-    // TAMPILKAN PROFIL
-    // ------------------------------
-    public function showProfile() {
-        // Cek Login
-        if (!isset($_SESSION['user_id'])) {
-            header('Location: index.php?page=login&error=Harap login terlebih dahulu');
-            exit;
-        }
+    private function fixUrl($url, $default) {
+        if (empty($url)) return $this->baseUrlAssets . $default;
+        if (strpos($url, '/') !== false) return $url; 
+        return $this->baseUrlUploads . $url;
+    }
 
+    public function showProfile() {
+        if (!isset($_SESSION['user_id'])) { header('Location: index.php?page=login'); exit; }
+        
         $current_user_id = (int)$_SESSION['user_id'];
         $profile_user_id = isset($_GET['id']) ? (int)$_GET['id'] : $current_user_id;
         $is_my_profile = ($profile_user_id === $current_user_id);
 
-        // PERBAIKAN DISINI: Menghapus u.followers dan u.following dari SELECT
-        $sql = "
-            SELECT 
-                u.user_id, u.username, u.nama_lengkap, u.email,
-                u.avatar_url, u.header_url, u.bio, u.nim, r.role_name,
-                (SELECT COUNT(*) FROM postingan p WHERE p.user_id = u.user_id) AS total_postingan
-            FROM users u
-            LEFT JOIN roles r ON u.role_id = r.role_id
-            WHERE u.user_id = :id_bv
-        ";
+        // Ganti bind :p_uid biar aman
+        $sql = "SELECT u.*, r.role_name, 
+                (SELECT COUNT(*) FROM postingan p WHERE p.user_id = u.user_id) AS total_postingan 
+                FROM users u 
+                LEFT JOIN roles r ON u.role_id = r.role_id 
+                WHERE u.user_id = :p_target_id";
 
-        // Gunakan $this->conn, bukan global $conn
         $stmt = oci_parse($this->conn, $sql);
-        oci_bind_by_name($stmt, ':id_bv', $profile_user_id);
-
-        if (!oci_execute($stmt)) {
-            $e = oci_error($stmt);
-            echo "Error Query: " . $e['message'];
-            exit;
-        }
-
+        oci_bind_by_name($stmt, ':p_target_id', $profile_user_id);
+        oci_execute($stmt);
         $profile_data = oci_fetch_assoc($stmt);
-        oci_free_statement($stmt);
-
-        if (!$profile_data) {
-            echo "Profil tidak ditemukan (ID: $profile_user_id)";
-            exit;
-        }
-
-        // Fix keys and defaults
-        $profile_data['AVATAR_URL_FIXED'] = !empty($profile_data['AVATAR_URL']) 
-            ? $profile_data['AVATAR_URL'] 
-            : $this->defaultAvatar; 
-
-        $profile_data['HEADER_URL_FIXED'] = !empty($profile_data['HEADER_URL']) 
-            ? $profile_data['HEADER_URL'] 
-            : $this->defaultHeader; 
-
-        // Set Followers/Following ke 0 karena kolom sudah dihapus
-        $profile_data['FOLLOWERS'] = 0;
-        $profile_data['FOLLOWING'] = 0;
         
-        $profile_data['BIO'] = isset($profile_data['BIO']) ? $profile_data['BIO'] : '';
-        $profile_data['NIM'] = isset($profile_data['NIM']) ? $profile_data['NIM'] : '';
+        if (!$profile_data) { echo "Profil tidak ditemukan."; exit; }
 
-        // --- AMBIL POSTINGAN USER ---
-        $user_posts = [];
-        $sql_posts = "
-            SELECT 
-                p.post_id, p.user_id, p.konten, p.post_image,
-                p.like_count, p.comment_count, 
-                TO_CHAR(p.created_at, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_AT_STR,
-                u.username, u.nama_lengkap, u.avatar_url,
-                (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.post_id AND l.user_id = :current_user_bv) AS USER_SUDAH_LIKE
-            FROM postingan p
-            JOIN users u ON p.user_id = u.user_id
-            WHERE p.user_id = :target_user_bv
-            ORDER BY p.post_id DESC
-        ";
-
-        $stmt_posts = oci_parse($this->conn, $sql_posts);
-        oci_bind_by_name($stmt_posts, ':target_user_bv', $profile_user_id);
-        oci_bind_by_name($stmt_posts, ':current_user_bv', $current_user_id);
+        $profile_data = array_change_key_case($profile_data, CASE_UPPER);
+        $profile_data['AVATAR_URL_FIXED'] = $this->fixUrl($profile_data['AVATAR_URL'], 'user.png');
+        $profile_data['HEADER_URL_FIXED'] = $this->fixUrl($profile_data['HEADER_URL'], 'default-header.jpg');
         
-        oci_execute($stmt_posts);
-
-        while ($row = oci_fetch_assoc($stmt_posts)) {
-            $row = array_change_key_case($row, CASE_UPPER);
-
-            // Fix Avatar Post
-            if (empty($row['AVATAR_URL']) || (strpos($row['AVATAR_URL'], '/assets/images/') !== false && strlen($row['AVATAR_URL']) < 30)) {
-                 $row['AVATAR_URL_FIXED'] = $this->defaultAvatar;
-            } else {
-                 $row['AVATAR_URL_FIXED'] = $row['AVATAR_URL'];
-            }
-
-            // Fix Waktu
-            $timestamp = strtotime($row['CREATED_AT_STR']); 
-            if ($timestamp === false) {
-                $row['WAKTU_POSTING'] = '-';
-            } else {
-                $diff = time() - $timestamp;
-                if ($diff < 60) { $row['WAKTU_POSTING'] = 'Baru saja'; }
-                else if ($diff < 3600) { $row['WAKTU_POSTING'] = floor($diff / 60) . 'm'; }
-                else if ($diff < 86400) { $row['WAKTU_POSTING'] = floor($diff / 3600) . 'j'; }
-                else { $row['WAKTU_POSTING'] = date('d M Y', $timestamp); }
-            }
-
-            $user_posts[] = $row;
-        }
-        oci_free_statement($stmt_posts);
-
-        // Panggil View
+        $user_posts = $this->postModel->getPostsByUserId($profile_user_id, $current_user_id);
         require __DIR__ . '/../views/profile.php';
     }
 
-    // ------------------------------
-    // FORM EDIT PROFIL
-    // ------------------------------
     public function showEditProfileForm() {
-        if (!isset($_SESSION['user_id'])) {
-            header('Location: index.php?page=login');
-            exit;
-        }
-
+        if (!isset($_SESSION['user_id'])) { header('Location: index.php?page=login'); exit; }
         $current_user_id = (int)$_SESSION['user_id'];
 
-        $sql = "SELECT user_id, username, nama_lengkap, email, avatar_url, header_url, bio, nim FROM users WHERE user_id = :id_bv";
+        $sql = "SELECT * FROM users WHERE user_id = :p_curr_id";
         $stmt = oci_parse($this->conn, $sql);
-        oci_bind_by_name($stmt, ':id_bv', $current_user_id);
+        oci_bind_by_name($stmt, ':p_curr_id', $current_user_id);
         oci_execute($stmt);
         $user_data = oci_fetch_assoc($stmt);
-        oci_free_statement($stmt);
-
-        if (!$user_data) {
-            echo "Data user tidak ditemukan.";
-            exit;
+        
+        if($user_data) {
+            $user_data = array_change_key_case($user_data, CASE_UPPER);
+            $user_data['AVATAR_URL_FIXED'] = $this->fixUrl($user_data['AVATAR_URL'], 'user.png');
+            $user_data['HEADER_URL_FIXED'] = $this->fixUrl($user_data['HEADER_URL'], 'default-header.jpg');
         }
-
-        $user_data['AVATAR_URL_FIXED'] = !empty($user_data['AVATAR_URL']) ? $user_data['AVATAR_URL'] : $this->defaultAvatar;
-        $user_data['HEADER_URL_FIXED'] = !empty($user_data['HEADER_URL']) ? $user_data['HEADER_URL'] : $this->defaultHeader;
-        $user_data['BIO'] = isset($user_data['BIO']) ? $user_data['BIO'] : '';
-        $user_data['NIM'] = isset($user_data['NIM']) ? $user_data['NIM'] : '';
-
         require __DIR__ . '/../views/edit_profile.php';
     }
 
-    // ------------------------------
-    // PROSES UPDATE PROFIL
-    // ------------------------------
     public function processProfileUpdate() {
-        if (!isset($_SESSION['user_id'])) {
-            die("Aksi tidak diizinkan. Silakan login terlebih dahulu.");
-        }
+        if (!isset($_SESSION['user_id'])) { header('Location: index.php?page=login'); exit; }
 
-        $current_user_id = (int)$_SESSION['user_id'];
-        $nama_lengkap = trim($_POST['nama_lengkap'] ?? '');
-        $username = trim($_POST['username'] ?? '');
-        $bio = trim($_POST['bio'] ?? '');
-
-        if (empty($nama_lengkap) || empty($username)) {
-            die("Nama lengkap dan username tidak boleh kosong.");
-        }
-
-        $target_dir_server_avatars = $_SERVER['DOCUMENT_ROOT'] . '/Sinergi/public/uploads/avatars/';
-        $target_dir_db_avatars = '/Sinergi/public/uploads/avatars/';
-
-        $target_dir_server_headers = $_SERVER['DOCUMENT_ROOT'] . '/Sinergi/public/uploads/headers/';
-        $target_dir_db_headers = '/Sinergi/public/uploads/headers/';
-
-        if (!is_dir($target_dir_server_avatars)) mkdir($target_dir_server_avatars, 0777, true);
-        if (!is_dir($target_dir_server_headers)) mkdir($target_dir_server_headers, 0777, true);
-
-        // Upload Avatar
-        $new_avatar_db_path = null;
-        if (!empty($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
-            $ext = strtolower(pathinfo($_FILES['avatar']['name'], PATHINFO_EXTENSION));
-            $new_filename = "user_" . $current_user_id . "_" . time() . "." . $ext;
-            $target_file_server = $target_dir_server_avatars . $new_filename;
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $user_id = (int)$_SESSION['user_id'];
+            $nama_lengkap = trim($_POST['nama_lengkap']);
+            $username = trim($_POST['username']); // Tambahan update username jika perlu
+            $bio = trim($_POST['bio'] ?? '');
             
-            if (in_array($ext, ['jpg', 'jpeg', 'png']) && $_FILES['avatar']['size'] <= 5 * 1024 * 1024) {
-                if (move_uploaded_file($_FILES['avatar']['tmp_name'], $target_file_server)) {
-                    $new_avatar_db_path = $target_dir_db_avatars . $new_filename;
+            // --- LOGIKA BARU: ROLE & TAHUN MASUK ---
+            // Ambil role lama dulu dari session/db untuk pengecekan hak akses
+            $current_role = (int)$_SESSION['role_id'];
+            
+            $new_role = isset($_POST['role_id']) ? (int)$_POST['role_id'] : $current_role;
+            $tahun_masuk = isset($_POST['tahun_masuk']) && !empty($_POST['tahun_masuk']) ? (int)$_POST['tahun_masuk'] : null;
+
+            // VALIDASI LOGIKA "MASUK AKAL" (Hanya jika mengubah ke Alumni)
+            if ($current_role == 1 && $new_role == 3) {
+                if (empty($tahun_masuk)) {
+                    header('Location: index.php?page=edit_profile&error=tahun_required'); 
+                    exit();
+                }
+                
+                $tahun_sekarang = (int)date('Y');
+                $masa_studi = $tahun_sekarang - $tahun_masuk;
+
+                // Syarat: Minimal 3 tahun selisih
+                if ($masa_studi < 3) {
+                    header('Location: index.php?page=edit_profile&error=belum_cukup_umur'); 
+                    exit();
                 }
             }
-        }
+            // ----------------------------------------
 
-        // Upload Header
-        $new_header_db_path = null;
-        if (!empty($_FILES['header']) && $_FILES['header']['error'] === UPLOAD_ERR_OK) {
-            $ext = strtolower(pathinfo($_FILES['header']['name'], PATHINFO_EXTENSION));
-            $new_filename = "header_" . $current_user_id . "_" . time() . "." . $ext;
-            $target_file_server = $target_dir_server_headers . $new_filename;
+            $file_avatar = $_FILES['avatar'] ?? null;
+            $file_header = $_FILES['header'] ?? null;
+            $avatar_baru = null;
+            $header_baru = null;
+
+            $upload_dir = __DIR__ . '/../../public/uploads/avatars/';
+            if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+
+            // Upload Logic
+            if ($file_avatar && $file_avatar['error'] === UPLOAD_ERR_OK) {
+                $ext = strtolower(pathinfo($file_avatar['name'], PATHINFO_EXTENSION));
+                $filename = 'avatar_' . $user_id . '_' . time() . '.' . $ext;
+                if (move_uploaded_file($file_avatar['tmp_name'], $upload_dir . $filename)) $avatar_baru = $filename;
+            }
+            if ($file_header && $file_header['error'] === UPLOAD_ERR_OK) {
+                $ext = strtolower(pathinfo($file_header['name'], PATHINFO_EXTENSION));
+                $filename = 'header_' . $user_id . '_' . time() . '.' . $ext;
+                if (move_uploaded_file($file_header['tmp_name'], $upload_dir . $filename)) $header_baru = $filename;
+            }
             
-            if (in_array($ext, ['jpg', 'jpeg', 'png']) && $_FILES['header']['size'] <= 5 * 1024 * 1024) {
-                if (move_uploaded_file($_FILES['header']['tmp_name'], $target_file_server)) {
-                    $new_header_db_path = $target_dir_db_headers . $new_filename;
-                }
+            // UPDATE QUERY
+            $sql = "UPDATE users SET 
+                    nama_lengkap = :b_nama, 
+                    username = :b_username,
+                    bio = :b_bio,
+                    role_id = :b_role,
+                    tahun_masuk = :b_tahun"; // Tambah Tahun Masuk
+
+            if ($avatar_baru) $sql .= ", avatar_url = :b_avatar";
+            if ($header_baru) $sql .= ", header_url = :b_header";
+            $sql .= " WHERE user_id = :b_id";
+
+            $stmt = oci_parse($this->conn, $sql);
+            
+            // Bind
+            oci_bind_by_name($stmt, ':b_nama', $nama_lengkap);
+            oci_bind_by_name($stmt, ':b_username', $username);
+            oci_bind_by_name($stmt, ':b_bio', $bio);
+            oci_bind_by_name($stmt, ':b_role', $new_role);
+            oci_bind_by_name($stmt, ':b_tahun', $tahun_masuk);
+            oci_bind_by_name($stmt, ':b_id', $user_id);
+            
+            if ($avatar_baru) oci_bind_by_name($stmt, ':b_avatar', $avatar_baru);
+            if ($header_baru) oci_bind_by_name($stmt, ':b_header', $header_baru);
+
+            if (oci_execute($stmt, OCI_COMMIT_ON_SUCCESS)) {
+                // Update Session Data
+                $_SESSION['nama_lengkap'] = $nama_lengkap;
+                $_SESSION['username'] = $username;
+                $_SESSION['role_id'] = $new_role; // Update Role di Session
+                
+                // Update Role Name di Session (Opsional, biar UI langsung berubah)
+                if ($new_role == 3) $_SESSION['role_name'] = 'Alumni';
+                if ($new_role == 1) $_SESSION['role_name'] = 'Mahasiswa';
+
+                if ($avatar_baru) $_SESSION['avatar_url'] = $this->fixUrl($avatar_baru, 'user.png');
+                
+                header('Location: index.php?page=profile&success=updated');
+                exit();
+            } else {
+                $e = oci_error($stmt);
+                echo "<h1>Gagal update database</h1>";
+                echo "<p>Pesan Error Oracle: <strong>" . $e['message'] . "</strong></p>";
+                echo "<p>SQL: " . htmlspecialchars($sql) . "</p>";
+                exit;
             }
         }
-
-        // Build SQL
-        $fields = "nama_lengkap = :nama, username = :uname, bio = :bio";
-        if ($new_avatar_db_path) $fields .= ", avatar_url = :avar";
-        if ($new_header_db_path) $fields .= ", header_url = :hvar";
-
-        $sql = "UPDATE users SET $fields WHERE user_id = :id";
-
-        $stmt = oci_parse($this->conn, $sql);
-        oci_bind_by_name($stmt, ':nama', $nama_lengkap);
-        oci_bind_by_name($stmt, ':uname', $username);
-        oci_bind_by_name($stmt, ':bio', $bio);
-        if ($new_avatar_db_path) oci_bind_by_name($stmt, ':avar', $new_avatar_db_path);
-        if ($new_header_db_path) oci_bind_by_name($stmt, ':hvar', $new_header_db_path);
-        oci_bind_by_name($stmt, ':id', $current_user_id);
-
-        if (oci_execute($stmt, OCI_NO_AUTO_COMMIT)) {
-            oci_commit($this->conn);
-        } else {
-            oci_rollback($this->conn);
-            $e = oci_error($stmt);
-            die("Error update: " . $e['message']);
-        }
-        oci_free_statement($stmt);
-
-        header("Location: index.php?page=profile&status=update");
-        exit;
     }
 }
 ?>

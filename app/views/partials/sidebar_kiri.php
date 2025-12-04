@@ -26,10 +26,19 @@
             </a>
 
             <?php
+            // --- FIX OOP NOTIFICATION BADGE ---
             require_once __DIR__ . '/../../models/NotificationModel.php';
+            require_once __DIR__ . '/../../../config/koneksi.php'; // Pastikan koneksi ada
+
             $badge_count = 0;
             if (isset($_SESSION['user_id'])) {
-                $badge_count = getUnreadCount($_SESSION['user_id']);
+                // Inisialisasi Model secara OOP
+                // Asumsikan $conn sudah tersedia global dari index.php atau config
+                global $conn; 
+                if ($conn) {
+                    $notifModel = new NotificationModel($conn);
+                    $badge_count = $notifModel->getUnreadCount($_SESSION['user_id']);
+                }
             }
             $badge_display = ($badge_count > 9) ? '9+' : $badge_count;
             ?>

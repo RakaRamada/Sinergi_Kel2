@@ -2,8 +2,15 @@
 
     <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar" id="forumFeedContainer">
 
-        <?php if (!empty($forum_posts)): ?>
-        <?php foreach ($forum_posts as $post): ?>
+        <?php 
+        // --- PERBAIKAN: Sinkronisasi Variabel ---
+        // Controller mengirim $forumData, tapi view ini biasa pakai $forum_posts.
+        // Kita mapping dulu biar aman.
+        $list_diskusi = isset($forumData) ? $forumData : (isset($forum_posts) ? $forum_posts : []);
+        ?>
+
+        <?php if (!empty($list_diskusi)): ?>
+        <?php foreach ($list_diskusi as $post): ?>
 
         <?php 
             // --- LOGIKA POSISI ---
@@ -207,6 +214,7 @@ function toggleLike(btn, postId) {
     const formData = new FormData();
     formData.append('post_id', postId);
 
+    // URL sudah benar (menuju Router Index)
     fetch('index.php?page=api-like-forum-post', {
         method: 'POST',
         body: formData
@@ -220,6 +228,7 @@ function deleteForumPost(postId) {
     const fd = new FormData();
     fd.append('post_id', postId);
 
+    // URL sudah benar (menuju Router Index)
     fetch('index.php?page=api-delete-forum-post', {
             method: 'POST',
             body: fd

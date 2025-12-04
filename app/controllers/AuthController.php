@@ -70,7 +70,7 @@ class AuthController
                 $_SESSION['username']     = $user_data['username'];
                 $_SESSION['role_name']    = $user_data['role_name'] ?? 'Mahasiswa';
                 $_SESSION['role_id']      = $user_data['role_id']; 
-                $_SESSION['avatar_url']   = !empty($user_data['avatar_url']) ? $user_data['avatar_url'] : '/Sinergi/public/assets/images/default_avatar.png';
+                $_SESSION['avatar_url']   = !empty($user_data['avatar_url']) ? $user_data['avatar_url'] : '/Sinergi/public/assets/images/user.png';
 
                 header("Location: index.php?page=" . ($user_data['role_id'] == 5 ? "admin-dashboard" : "dashboard"));
                 exit();

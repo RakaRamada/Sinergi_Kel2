@@ -1,60 +1,100 @@
-<main class="col-span-6 border-r border-gray-200 p-6 h-screen overflow-y-auto custom-scrollbar">
+<?php
+// File: app/views/notification.php
 
-    <div class="flex justify-between items-end mb-6">
-        <div>
-            <h1 class="text-2xl font-bold text-gray-800">Notifikasi</h1>
-        </div>
+// --- 1. HELPER WAKTU ---
+if (!function_exists('time_elapsed_string_notif')) {
+    function time_elapsed_string_notif($datetime, $full = false) {
+        try {
+            // Sesuaikan timezone dengan server/db
+            $now = new DateTime('now', new DateTimeZone('Asia/Jakarta'));
+            $ago = new DateTime($datetime, new DateTimeZone('Asia/Jakarta'));
+        } catch (Exception $e) { return $datetime; }
+
+        $diff = $now->diff($ago);
+        $weeks = floor($diff->d / 7);
+        $days_left = $diff->d - ($weeks * 7);
+
+        $string = array(
+            'y' => 'tahun',
+            'm' => 'bulan',
+            'w' => 'minggu',
+            'd' => 'hari',
+            'h' => 'jam',
+            'i' => 'menit',
+            's' => 'detik',
+        );
+        $vals = ['y' => $diff->y, 'm' => $diff->m, 'w' => $weeks, 'd' => $days_left, 'h' => $diff->h, 'i' => $diff->i, 's' => $diff->s];
+
+        foreach ($string as $k => &$v) {
+            if ($vals[$k]) {
+                $v = $vals[$k] . ' ' . $v;
+            } else {
+                unset($string[$k]);
+            }
+        }
+
+        if (!$full) $string = array_slice($string, 0, 1);
+        return $string ? implode(', ', $string) . ' yang lalu' : 'Baru saja';
+    }
+}
+?>
+
+<main class="col-span-6 border-r border-gray-200 p-6 h-screen overflow-y-auto custom-scrollbar relative">
+
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800">Notifikasi</h1>
+
+        <button id="btn-clear-all" onclick="openClearModal()"
+            class="hidden text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                </path>
+            </svg>
+            Bersihkan Semua
+        </button>
     </div>
 
     <div class="grid grid-cols-2 w-full mb-6">
-
-        <button onclick="switchTab('unread')" id="btn-unread"
+        <button onclick="switchTab('unread')" id="btn-tab-unread"
             class="w-full py-3 text-sm font-bold text-black border-b-2 border-black bg-gray-50 transition-colors focus:outline-none cursor-pointer flex items-center justify-center gap-2">
             Belum Dibaca
             <?php if(count($unread_list) > 0): ?>
-            <span class="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                <?= count($unread_list) ?>
-            </span>
+            <span
+                class="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full"><?= count($unread_list) ?></span>
             <?php endif; ?>
         </button>
-
-        <button onclick="switchTab('read')" id="btn-read"
+        <button onclick="switchTab('read')" id="btn-tab-read"
             class="w-full py-3 text-sm font-medium text-gray-500 border-b border-gray-200 bg-white hover:bg-gray-50 hover:text-gray-700 transition-colors focus:outline-none cursor-pointer">
             Sudah Dibaca
         </button>
     </div>
 
-    <div id="content-unread" class="block">
+    <div id="content-unread" class="block space-y-3">
         <?php if (empty($unread_list)): ?>
         <div class="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-200 mt-2">
             <div class="text-4xl mb-2">📭</div>
             <p class="text-gray-500 font-medium">Tidak ada notifikasi baru.</p>
-            <p class="text-gray-400 text-xs mt-1">Istirahatlah sejenak!</p>
         </div>
         <?php else: ?>
-        <div class="space-y-3">
-            <?php foreach ($unread_list as $notif): renderNotifCard($notif, true); endforeach; ?>
-        </div>
+        <?php foreach ($unread_list as $notif): renderNotifCard($notif, true); endforeach; ?>
         <?php endif; ?>
     </div>
 
-    <div id="content-read" class="hidden">
-        <div class="mb-4 p-3 bg-blue-50 text-blue-700 text-xs flex items-center gap-2 rounded border border-blue-100">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <span>Notifikasi akan hilang otomatis <strong>7 hari</strong> setelah dibaca.</span>
-        </div>
-
+    <div id="content-read" class="hidden space-y-2">
         <?php if (empty($read_list)): ?>
         <div class="text-center py-12 mt-2">
             <p class="text-gray-400 italic">Belum ada riwayat notifikasi.</p>
         </div>
         <?php else: ?>
-        <div class="space-y-2">
-            <?php foreach ($read_list as $notif): renderNotifCard($notif, false); endforeach; ?>
+        <div class="mb-4 p-3 bg-blue-50 text-blue-700 text-xs flex items-center gap-2 rounded border border-blue-100">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span>Notifikasi hilang otomatis dalam <strong>7 hari</strong>.</span>
         </div>
+        <?php foreach ($read_list as $notif): renderNotifCard($notif, false); endforeach; ?>
         <?php endif; ?>
     </div>
 
@@ -62,89 +102,210 @@
 
 <?php require 'app/views/partials/sidebar_kanan.php'; ?>
 
+<div id="clearModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onclick="closeClearModal()"></div>
+    <div
+        class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white rounded-xl shadow-2xl p-6 text-center">
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+            <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        </div>
+        <h3 class="text-lg leading-6 font-bold text-gray-900">Bersihkan Riwayat?</h3>
+        <div class="mt-2">
+            <p class="text-sm text-gray-500">Semua notifikasi yang <strong>sudah dibaca</strong> akan dihapus permanen.
+            </p>
+        </div>
+        <div class="mt-6 flex justify-center gap-3">
+            <button onclick="closeClearModal()"
+                class="px-4 py-2 bg-white text-gray-700 font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition">Batal</button>
+            <button onclick="confirmClearAll()"
+                class="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition shadow-lg">Ya,
+                Hapus</button>
+        </div>
+    </div>
+</div>
+
 <script>
+const hasReadNotif = <?= !empty($read_list) ? 'true' : 'false' ?>;
+
 function switchTab(tabName) {
-    // 1. Sembunyikan semua konten
     document.getElementById('content-unread').classList.add('hidden');
     document.getElementById('content-read').classList.add('hidden');
 
-    // 2. Definisi Class (Gaya Tampilan)
-    // Style Aktif: Border bawah hitam tebal, teks hitam tebal, background agak abu (biar mirip referensi)
-    const activeClass =
+    const active =
         "w-full py-3 text-sm font-bold text-black border-b-2 border-black bg-gray-50 transition-colors focus:outline-none cursor-pointer flex items-center justify-center gap-2";
-
-    // Style Tidak Aktif: Border bawah tipis abu, teks abu, background putih
-    const inactiveClass =
+    const inactive =
         "w-full py-3 text-sm font-medium text-gray-500 border-b border-gray-200 bg-white hover:bg-gray-50 hover:text-gray-700 transition-colors focus:outline-none cursor-pointer flex items-center justify-center gap-2";
 
-    // 3. Reset kedua tombol ke style 'inactive' dulu
-    document.getElementById('btn-unread').className = inactiveClass;
-    document.getElementById('btn-read').className = inactiveClass;
-
-    // 4. Aktifkan tombol yang diklik & Tampilkan kontennya
+    document.getElementById('btn-tab-unread').className = inactive;
+    document.getElementById('btn-tab-read').className = inactive;
     document.getElementById('content-' + tabName).classList.remove('hidden');
-    document.getElementById('btn-' + tabName).className = activeClass;
+    document.getElementById('btn-tab-' + tabName).className = active;
+
+    const btnClear = document.getElementById('btn-clear-all');
+    if (tabName === 'read' && hasReadNotif) {
+        btnClear.classList.remove('hidden');
+        btnClear.classList.add('flex');
+    } else {
+        btnClear.classList.add('hidden');
+        btnClear.classList.remove('flex');
+    }
 }
 
-// LOGIC: Cek URL apakah harus buka tab 'Sudah Dibaca' otomatis (setelah klik notif)
+function deleteOne(e, notifId) {
+    e.stopPropagation(); // Mencegah klik card
+    if (!confirm('Hapus notifikasi ini?')) return;
+
+    const fd = new FormData();
+    fd.append('notif_id', notifId);
+
+    fetch('index.php?page=api-delete-notif', {
+            method: 'POST',
+            body: fd
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.status === 'success') {
+                const el = document.getElementById('notif-card-' + notifId);
+                if (el) {
+                    el.style.opacity = '0';
+                    setTimeout(() => el.remove(), 300);
+                }
+            } else {
+                alert('Gagal menghapus: ' + (d.message || 'Error server'));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Terjadi kesalahan koneksi.');
+        });
+}
+
+function openClearModal() {
+    document.getElementById('clearModal').classList.remove('hidden');
+}
+
+function closeClearModal() {
+    document.getElementById('clearModal').classList.add('hidden');
+}
+
+function confirmClearAll() {
+    fetch('index.php?page=api-clear-all-notif', {
+            method: 'POST'
+        })
+        .then(r => r.json()).then(d => {
+            if (d.status === 'success') location.reload();
+            else alert('Gagal membersihkan: ' + d.message);
+        })
+        .catch(err => alert('Koneksi error'));
+}
+
 document.addEventListener("DOMContentLoaded", function() {
     const urlParams = new URLSearchParams(window.location.search);
-    const openTab = urlParams.get('open_tab');
-
-    if (openTab === 'read') {
-        switchTab('read');
-    }
+    if (urlParams.get('open_tab') === 'read') switchTab('read');
 });
 </script>
 
 <?php
-/**
- * Helper Render Kartu (Versi Update: Full Clickable Card)
- */
 function renderNotifCard($notif, $is_unread) {
-    $current_page = 'index.php?page=notification';
-    
-    // Link Logika (Mark Read -> Redirect)
-    $final_link = $is_unread 
-        ? "index.php?page=read-notif&id={$notif['notif_id']}&redirect=" . urlencode($current_page)
-        : "#";
+    $target_url = ""; 
+    $final_link = "#";
 
-    // Style (Tambahkan cursor-pointer)
+    // --- 1. TENTUKAN TUJUAN URL ---
+    if ($notif['type'] == 'group_invite') { 
+        $target_url = ""; // Invite tidak ada link klik (pakai tombol terima/tolak)
+    } 
+    elseif (!empty($notif['related_group_id'])) {
+        $target_url = "index.php?page=group-details&group_id=" . $notif['related_group_id'];
+    } 
+    elseif (!empty($notif['related_forum_post_id'])) {
+        $target_url = "index.php?page=forum-post-detail&post_id=" . $notif['related_forum_post_id'];
+    } 
+    elseif (!empty($notif['related_post_id'])) {
+        $target_url = "index.php?page=post-detail&id=" . $notif['related_post_id'];
+    } 
+
+    // --- 2. LOGIKA GENERATE LINK FINAL ---
+    if (!empty($target_url)) {
+        // Kasus A: Punya Tujuan Jelas
+        if ($is_unread) {
+            // Baca dulu -> Redirect ke tujuan
+            $final_link = "index.php?page=read-notif&id={$notif['notif_id']}&redirect=" . urlencode($target_url);
+        } else {
+            // Langsung ke tujuan
+            $final_link = $target_url;
+        }
+    } else {
+        // Kasus B: Tidak Punya Tujuan (Info Promote/Demote/Bug ID)
+        if ($is_unread && $notif['type'] != 'group_invite') {
+            // SOLUSI DARI KAMU:
+            // Cukup tandai "Sudah Dibaca", lalu refresh halaman notifikasi ini lagi.
+            $current_page = "index.php?page=notification";
+            $final_link = "index.php?page=read-notif&id={$notif['notif_id']}&redirect=" . urlencode($current_page);
+        }
+    }
+
     $bg_class = $is_unread ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-gray-100 opacity-75';
+    // Cursor pointer hanya muncul jika ada link yang bisa diklik
+    $cursor_class = ($final_link !== '#') ? 'cursor-pointer hover:shadow-md' : 'cursor-default';
     
-    // Ikon
+    // --- ICON ---
     $icon = '🔔';
-    if($notif['type']=='like') $icon='❤️';
-    if($notif['type']=='comment') $icon='💬';
-    if($notif['type']=='group_invite') $icon='📢';
+    switch ($notif['type']) {
+        case 'like': $icon = '❤️'; break;
+        case 'comment': $icon = '💬'; break;
+        case 'group_invite': $icon = '📩'; break;
+        case 'info': $icon = 'ℹ️'; break; 
+    }
     
+    $waktu = time_elapsed_string_notif($notif['time_str']); 
+    
+    // Encode link untuk JS
+    $js_link = json_encode($final_link);
     ?>
-<div onclick="window.location.href='<?= $final_link ?>'"
-    class="flex gap-4 p-4 rounded-lg border hover:shadow-md transition cursor-pointer relative group <?= $bg_class ?>">
 
-    <div class="text-2xl"><?= $icon ?></div>
+<div id="notif-card-<?= $notif['notif_id'] ?>" onclick='handleClick(<?= $js_link ?>)'
+    class="flex gap-4 p-4 rounded-lg border transition relative group <?= $bg_class ?> <?= $cursor_class ?>">
 
-    <div class="flex-1">
-        <p class="text-gray-800 text-sm">
+    <div class="text-2xl shrink-0"><?= $icon ?></div>
+
+    <div class="flex-1 min-w-0">
+        <p class="text-gray-800 text-sm leading-snug pr-6">
             <span class="font-bold hover:underline"><?= htmlspecialchars($notif['actor_name']) ?></span>
             <span class="text-gray-700"><?= htmlspecialchars($notif['message']) ?></span>
         </p>
-        <p class="text-xs text-gray-400 mt-1"><?= $notif['minutes_ago'] ?> menit yang lalu</p>
+        <p class="text-xs text-gray-400 mt-1"><?= $waktu ?></p>
 
         <?php if ($is_unread && $notif['type'] === 'group_invite'): ?>
         <div class="mt-2 flex gap-2 relative z-10">
             <a href="index.php?page=accept-invite&notif_id=<?= $notif['notif_id'] ?>" onclick="event.stopPropagation()"
-                class="bg-gray-900 text-white text-xs px-3 py-1 rounded hover:bg-gray-700 transition">
-                Terima
-            </a>
+                class="bg-gray-900 text-white text-xs px-3 py-1 rounded hover:bg-gray-700 transition">Terima</a>
             <a href="index.php?page=reject-invite&notif_id=<?= $notif['notif_id'] ?>" onclick="event.stopPropagation()"
-                class="bg-white border border-gray-300 text-gray-700 text-xs px-3 py-1 rounded hover:bg-red-50 hover:text-red-600 transition">
-                Tolak
-            </a>
+                class="bg-white border border-gray-300 text-gray-700 text-xs px-3 py-1 rounded hover:bg-red-50 hover:text-red-600 transition">Tolak</a>
         </div>
         <?php endif; ?>
     </div>
+
+    <?php if (!$is_unread): ?>
+    <button onclick="deleteOne(event, <?= $notif['notif_id'] ?>)"
+        class="absolute top-2 right-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition opacity-0 group-hover:opacity-100"
+        title="Hapus Notifikasi">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+            </path>
+        </svg>
+    </button>
+    <?php endif; ?>
 </div>
-<?php
+<?php } ?>
+
+<script>
+function handleClick(url) {
+    if (url && url !== '#') {
+        window.location.href = url;
+    }
 }
-?>
+</script>

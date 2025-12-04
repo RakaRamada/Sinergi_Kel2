@@ -1,22 +1,30 @@
 <?php
 // File: app/views/partials/postingan.php
+// VERSI FINAL: DASHBOARD FEED DENGAN SVG LIKE (MERAH PEKAT)
 ?>
+
+<div id="post-feed-container" class="space-y-4"></div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    console.log("Sistem Postingan Siap!");
+    console.log("Sistem Postingan Siap (SVG Mode)!");
 
+    // ==================================================
+    // 1. INISIALISASI VARIABEL
+    // ==================================================
     const postFeedContainer = document.getElementById('post-feed-container');
     const createPostForm = document.getElementById('create-post-form');
     const submitButton = document.getElementById('submit-post-button');
 
+    // Variabel Gambar Preview (Untuk Form Create Post)
     const imageInput = document.getElementById('post-image-input');
     const imagePreviewContainer = document.getElementById('image-preview-container');
     const imagePreview = document.getElementById('image-preview');
     const removeImageBtn = document.getElementById('remove-image-btn');
 
-    // CRITICAL: Ambil current user ID dari session
-    const currentUserId = <?php echo $_SESSION['user_id'] ?? 0; ?>;
-
+    // ==================================================
+    // 2. LOGIKA PREVIEW GAMBAR (FORM CREATE)
+    // ==================================================
     if (imageInput) {
         imageInput.addEventListener('change', function() {
             const file = this.files[0];
@@ -26,13 +34,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     this.value = '';
                     return;
                 }
-
                 if (file.size > 5 * 1024 * 1024) {
                     alert('Ukuran file terlalu besar. Maksimal 5MB.');
                     this.value = '';
                     return;
                 }
-
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     if (imagePreview) imagePreview.setAttribute('src', e.target.result);
@@ -51,6 +57,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // ==================================================
+    // 3. LOGIKA SUBMIT POSTINGAN BARU
+    // ==================================================
     if (createPostForm) {
         createPostForm.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -71,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const formData = new FormData(this);
 
-            fetch('/Sinergi/index.php?page=post-api&method=createPost', {
+            fetch('index.php?page=post-api&method=createPost', {
                     method: 'POST',
                     body: formData
                 })
@@ -81,7 +90,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         createPostForm.reset();
                         if (imagePreviewContainer) imagePreviewContainer.classList.add('hidden');
                         if (imagePreview) imagePreview.src = '#';
-                        loadPosts();
+                        loadPosts(); // Refresh Feed Otomatis
                         window.scrollTo({
                             top: 0,
                             behavior: 'smooth'
@@ -103,14 +112,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    //LOAD POSTINGAN
+    // ==================================================
+    // 4. FUNGSI LOAD POSTINGAN (FEED) - MENGGUNAKAN SVG
+    // ==================================================
     function loadPosts() {
         if (!postFeedContainer) return;
 
         postFeedContainer.innerHTML =
             '<div class="p-8 text-center text-gray-500"><div class="animate-pulse">Sedang memuat...</div></div>';
 
-        fetch('/Sinergi/index.php?page=post-api&method=getPostings')
+        fetch('index.php?page=post-api&method=getPostings')
             .then(response => {
                 if (!response.ok) throw new Error('Network response was not ok');
                 return response.json();
@@ -128,6 +139,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 posts.forEach(post => {
+                    // Render Gambar Postingan
                     const postImageHTML = post.POST_IMAGE ?
                         `<div class="mt-3 mb-1">
                             <img src="${escapeHtml(post.POST_IMAGE)}" 
@@ -137,89 +149,79 @@ document.addEventListener('DOMContentLoaded', function() {
                                  style="max-height: 500px;">
                          </div>` : '';
 
-                    const isLiked = post.USER_SUDAH_LIKE > 0;
-                    const likeColorClass = isLiked ? 'text-red-500' : 'text-gray-500';
-                    const iconFilterClass = isLiked ? 'filter-red' : '';
-
                     const kontenText = post.KONTEN ? escapeHtml(post.KONTEN) : '';
 
-                    const isOwnPost = parseInt(post.USER_ID) === parseInt(currentUserId);
+                    // LOGIKA STYLE LIKE (SVG)
+                    const isLiked = post.USER_SUDAH_LIKE > 0;
+                    // Class Text: Merah vs Abu
+                    const likeBtnClass = isLiked ? 'text-red-500' : 'text-gray-500';
+                    // Class SVG: Solid vs Outline
+                    const svgClass = isLiked ? 'fill-current' : 'fill-none stroke-current';
 
-                    // Button Report yang diletakkan sejajar dengan Like & Comment
-                    const reportButtonHTML = !isOwnPost ? `
-                        <button class="group flex items-center space-x-2 hover:text-green-500 transition-colors w-fit"
-                                onclick="event.stopPropagation(); openReportModal(${post.POST_ID})" title="Laporkan">
-                            <div class="p-2 rounded-full group-hover:bg-green-50 transition-colors">
-                                <img src="/Sinergi/public/assets/icons/report.svg" 
-                                     alt="Laporkan" 
-                                     class="w-5 h-5">
-                            </div>
-                        </button>
-                    ` : '';
-
-                    // UPDATE LAYOUT DISINI
                     const postHTML = `
-                        <div class="bg-white border-b border-gray-200 hover:bg-gray-50/30 transition-colors cursor-pointer" onclick="window.location.href='index.php?page=post-detail&id=${post.POST_ID}'">
+                        <div class="bg-white border-b border-gray-200 hover:bg-gray-50/30 transition-colors">
                             <div class="p-4">
                                 <div class="flex items-start space-x-3">
-                                    <!-- Avatar -->
-                                    <div class="flex-shrink-0 cursor-pointer" onclick="event.stopPropagation(); window.location.href='index.php?page=profile&id=${post.USER_ID}'">
+                                    <div class="flex-shrink-0 cursor-pointer" onclick="window.location.href='index.php?page=profile&id=${post.USER_ID}'">
                                          <img src="${escapeHtml(post.AVATAR_URL_FIXED)}" 
                                               alt="Avatar" 
                                               class="w-10 h-10 rounded-full object-cover bg-gray-200 border border-gray-100">
                                     </div>
                                     
                                     <div class="flex-1 min-w-0">
-                                        <!-- Header: @Username (Bold) | Role (Gray) -->
-                                        <div class="flex items-center space-x-2 mb-1">
+                                        <div class="flex items-center space-x-1 mb-1">
                                             <a href="index.php?page=profile&id=${post.USER_ID}" 
-                                               onclick="event.stopPropagation();"
-                                               class="font-bold text-gray-900 hover:underline text-[15px]">
-                                                @${escapeHtml(post.USERNAME)}
+                                               class="font-bold text-gray-900 hover:underline text-base">
+                                                ${escapeHtml(post.NAMA_LENGKAP)}
                                             </a>
-                                            <span class="text-gray-500 text-sm">${escapeHtml(post.ROLE_NAME || 'User')}</span>
+                                            <span class="text-gray-500 text-sm">@${escapeHtml(post.USERNAME)}</span>
+                                            <span class="text-gray-400 text-sm">·</span>
+                                            <span class="text-gray-500 text-sm hover:underline cursor-pointer" 
+                                                  title="${escapeHtml(post.CREATED_AT_STR || '')}">
+                                                ${escapeHtml(post.WAKTU_POSTING)}
+                                            </span>
                                         </div>
                                         
-                                        <!-- Konten -->
-                                        <div class="mb-2">
-                                            <p class="text-gray-800 text-[15px] leading-normal break-words whitespace-pre-wrap">${kontenText}</p>
+                                        <div class="cursor-pointer" onclick="window.location.href='index.php?page=post-detail&id=${post.POST_ID}'">
+                                            <p class="text-gray-800 text-[15px] leading-normal break-words whitespace-pre-wrap mb-2">${kontenText}</p>
                                         </div>
                                         
                                         ${postImageHTML}
 
-                                        <!-- Footer: Actions (Left) - Date (Right) -->
-                                        <div class="flex items-center justify-between mt-3">
+                                        <div class="flex items-center justify-between mt-3 max-w-md text-gray-500">
                                             
-                                            <!-- Kiri: Like, Comment, Report -->
-                                            <div class="flex items-center space-x-6 text-gray-500">
-                                                <button onclick="event.stopPropagation(); handleLike(this, ${post.POST_ID})" 
-                                                        class="group flex items-center space-x-2 hover:text-red-500 transition-colors ${likeColorClass}">
-                                                    <div class="p-2 -ml-2 rounded-full group-hover:bg-red-50 transition-colors relative">
-                                                        <img src="/Sinergi/public/assets/icons/heart.svg" 
-                                                             alt="Like" 
-                                                             class="w-5 h-5 icon-transition ${iconFilterClass}">
-                                                    </div>
-                                                    <span class="like-count text-sm font-medium">${post.TOTAL_LIKES || 0}</span>
-                                                </button>
+                                            <button onclick="handleLike(this, ${post.POST_ID})" 
+                                                    class="group flex items-center space-x-2 hover:text-red-500 transition-colors ${likeBtnClass} w-fit">
+                                                <div class="p-2 rounded-full group-hover:bg-red-50 transition-colors relative">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" 
+                                                         class="w-5 h-5 transition-transform duration-200 ${svgClass}" 
+                                                         viewBox="0 0 24 24" 
+                                                         stroke-width="1.5" 
+                                                         stroke="currentColor">
+                                                      <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                                                    </svg>
+                                                </div>
+                                                <span class="like-count text-sm font-medium">${post.LIKE_COUNT || 0}</span>
+                                            </button>
 
-                                                <a href="index.php?page=post-detail&id=${post.POST_ID}"
-                                                    class="group flex items-center space-x-2 hover:text-blue-500 transition-colors">
-                                                    <div class="p-2 rounded-full group-hover:bg-blue-50 transition-colors">
-                                                        <img src="/Sinergi/public/assets/icons/comment.svg" 
-                                                             alt="Komentar" 
-                                                             class="w-5 h-5">
-                                                    </div>
-                                                    <span class="text-sm font-medium">${post.TOTAL_COMMENTS || 0}</span>
-                                                </a>
+                                            <a href="index.php?page=post-detail&id=${post.POST_ID}"
+                                                class="group flex items-center space-x-2 hover:text-blue-500 transition-colors w-fit">
+                                                <div class="p-2 rounded-full group-hover:bg-blue-50 transition-colors">
+                                                    <img src="/Sinergi/public/assets/icons/comment.svg" 
+                                                         alt="Komentar" 
+                                                         class="w-5 h-5">
+                                                </div>
+                                                <span class="text-sm font-medium">${post.COMMENT_COUNT || 0}</span>
+                                            </a>
 
-                                                ${reportButtonHTML}
-                                            </div>
-
-                                            <!-- Kanan: Tanggal -->
-                                            <div class="text-gray-400 text-xs hover:underline" title="${escapeHtml(post.CREATED_AT_STR || '')}">
-                                                ${escapeHtml(post.WAKTU_POSTING)}
-                                            </div>
-
+                                            <button class="group flex items-center space-x-2 hover:text-green-500 transition-colors w-fit"
+                                                    onclick="handleReport(${post.POST_ID})">
+                                                <div class="p-2 rounded-full group-hover:bg-green-50 transition-colors">
+                                                    <img src="/Sinergi/public/assets/icons/report.svg" 
+                                                         alt="Laporkan" 
+                                                         class="w-5 h-5">
+                                                </div>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -241,51 +243,68 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
+    // Panggil fungsi saat load
     loadPosts();
-    window.loadPosts = loadPosts;
+    window.loadPosts = loadPosts; // Expose ke global window agar bisa dipanggil ulang
 
+    // Helper Escape HTML
     function escapeHtml(text) {
         if (!text) return '';
-        const map = {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        };
-        return text.toString().replace(/[&<>"']/g, m => map[m]);
+        return text.toString().replace(/[&<>"']/g, function(m) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            } [m];
+        });
     }
-
-    window.escapeHtml = escapeHtml;
-
-}); // Akhir DOMContentLoaded
+});
 
 // ==================================================
-// 5. FUNGSI GLOBAL (Like & Modal)
+// 5. FUNGSI GLOBAL (HANDLE LIKE - SVG MODE)
 // ==================================================
 
 function handleLike(btn, postId) {
     const countSpan = btn.querySelector('.like-count');
-    const iconImg = btn.querySelector('img');
+    const svgIcon = btn.querySelector('svg'); // Target elemen SVG
+
     let currentCount = parseInt(countSpan.innerText) || 0;
     const isCurrentlyLiked = btn.classList.contains('text-red-500');
 
+    // UI OPTIMISTIC UPDATE (Langsung ubah tampilan sebelum request selesai)
     if (isCurrentlyLiked) {
+        // PROSES UNLIKE
         btn.classList.remove('text-red-500');
         btn.classList.add('text-gray-500');
-        iconImg.classList.remove('filter-red');
+
+        // Ubah SVG: Hapus fill, tambah stroke (outline)
+        svgIcon.classList.remove('fill-current');
+        svgIcon.classList.add('fill-none', 'stroke-current');
+
         countSpan.innerText = Math.max(0, currentCount - 1);
     } else {
-        btn.classList.add('text-red-500');
+        // PROSES LIKE
         btn.classList.remove('text-gray-500');
-        iconImg.classList.add('filter-red');
+        btn.classList.add('text-red-500');
+
+        // Ubah SVG: Hapus outline, tambah fill (solid)
+        svgIcon.classList.remove('fill-none', 'stroke-current');
+        svgIcon.classList.add('fill-current');
+
         countSpan.innerText = currentCount + 1;
+
+        // Efek "Pop" kecil animasi
+        svgIcon.style.transform = "scale(1.2)";
+        setTimeout(() => svgIcon.style.transform = "scale(1)", 200);
     }
 
+    // KIRIM REQUEST KE SERVER
     const formData = new FormData();
     formData.append('post_id', postId);
 
-    fetch('/Sinergi/index.php?page=post-api&method=toggleLike', {
+    fetch('index.php?page=post-api&method=toggleLike', {
             method: 'POST',
             body: formData
         })
@@ -293,37 +312,47 @@ function handleLike(btn, postId) {
         .then(data => {
             if (data.status !== 'success') {
                 console.error("Like gagal:", data.message);
+                // Revert UI jika gagal
                 if (isCurrentlyLiked) {
                     btn.classList.add('text-red-500');
-                    btn.classList.remove('text-gray-500');
-                    iconImg.classList.add('filter-red');
+                    svgIcon.classList.remove('fill-none', 'stroke-current');
+                    svgIcon.classList.add('fill-current');
                     countSpan.innerText = currentCount;
                 } else {
                     btn.classList.remove('text-red-500');
-                    btn.classList.add('text-gray-500');
-                    iconImg.classList.remove('filter-red');
+                    svgIcon.classList.add('fill-none', 'stroke-current');
+                    svgIcon.classList.remove('fill-current');
                     countSpan.innerText = currentCount;
                 }
-                alert(data.message || 'Gagal melakukan like.');
+            } else {
+                // Update dengan jumlah pasti dari server
+                if (data.new_count !== undefined) countSpan.innerText = data.new_count;
             }
         })
         .catch(err => {
-            console.error('Error Like API:', err);
-            if (isCurrentlyLiked) {
-                btn.classList.add('text-red-500');
-                btn.classList.remove('text-gray-500');
-                iconImg.classList.add('filter-red');
-                countSpan.innerText = currentCount;
-            } else {
-                btn.classList.remove('text-red-500');
-                btn.classList.add('text-gray-500');
-                iconImg.classList.remove('filter-red');
-                countSpan.innerText = currentCount;
-            }
-            alert('Terjadi kesalahan koneksi.');
+            console.error(err);
         });
 }
 
+// Fungsi Report
+function handleReport(postId) {
+    const reason = prompt("Apa alasan Anda melaporkan postingan ini?");
+    if (reason) {
+        const formData = new FormData();
+        formData.append('post_id', postId);
+        formData.append('reason', reason);
+
+        fetch('index.php?page=post-api&method=addReport', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(d => alert(d.message))
+            .catch(e => alert("Gagal lapor"));
+    }
+}
+
+// Fungsi Modal Gambar
 function openImageModal(imageSrc) {
     const oldModal = document.getElementById('image-modal-overlay');
     if (oldModal) oldModal.remove();
@@ -336,36 +365,22 @@ function openImageModal(imageSrc) {
         display: flex; align-items: center; justify-content: center;
         padding: 20px; backdrop-filter: blur(5px);
     `;
-
     modal.onclick = function() {
         modal.remove();
     };
 
     const img = document.createElement('img');
     img.src = imageSrc;
-    img.style.cssText = `
-        max-width: 100%; max-height: 90vh;
-        border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        object-fit: contain;
-    `;
+    img.style.cssText =
+        `max-width: 100%; max-height: 90vh; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); object-fit: contain;`;
     img.onclick = function(e) {
         e.stopPropagation();
     };
 
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = '&times;';
-    closeBtn.style.cssText = `
-        position: absolute; top: 20px; right: 30px;
-        color: white; font-size: 40px; font-weight: bold; cursor: pointer;
-        background: none; border: none; z-index: 100000;
-        transition: transform 0.2s;
-    `;
-    closeBtn.onmouseover = function() {
-        this.style.transform = 'scale(1.2)';
-    };
-    closeBtn.onmouseout = function() {
-        this.style.transform = 'scale(1)';
-    };
+    closeBtn.style.cssText =
+        `position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; font-weight: bold; cursor: pointer; background: none; border: none; z-index: 100000;`;
     closeBtn.onclick = function() {
         modal.remove();
     };
@@ -374,156 +389,10 @@ function openImageModal(imageSrc) {
     modal.appendChild(img);
     document.body.appendChild(modal);
 }
-
-// ==================================================
-// 6. FUNGSI REPORT POSTINGAN
-// ==================================================
-
-function openReportModal(postId) {
-    const oldModal = document.getElementById('report-modal-overlay');
-    if (oldModal) oldModal.remove();
-
-    const modal = document.createElement('div');
-    modal.id = 'report-modal-overlay';
-    modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
-    modal.style.backdropFilter = 'blur(5px)';
-
-    modal.innerHTML = `
-        <div class="bg-white rounded-lg max-w-md w-full p-6 shadow-xl" onclick="event.stopPropagation()">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold text-gray-900">Laporkan Postingan</h3>
-                <button onclick="closeReportModal()" class="text-gray-400 hover:text-gray-600">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-            
-            <form id="report-form" onsubmit="submitReport(event, ${postId})">
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        Pilih alasan laporan:
-                    </label>
-                    
-                    <div class="space-y-2">
-                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                            <input type="radio" name="reason" value="Spam atau konten menyesatkan" class="mr-3" required>
-                            <span class="text-sm">Spam atau konten menyesatkan</span>
-                        </label>
-                        
-                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                            <input type="radio" name="reason" value="Ujaran kebencian atau pelecehan" class="mr-3" required>
-                            <span class="text-sm">Ujaran kebencian atau pelecehan</span>
-                        </label>
-                        
-                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                            <input type="radio" name="reason" value="Konten kekerasan atau berbahaya" class="mr-3" required>
-                            <span class="text-sm">Konten kekerasan atau berbahaya</span>
-                        </label>
-                        
-                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                            <input type="radio" name="reason" value="Konten tidak pantas atau dewasa" class="mr-3" required>
-                            <span class="text-sm">Konten tidak pantas atau dewasa</span>
-                        </label>
-                        
-                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                            <input type="radio" name="reason" value="Pelanggaran privasi" class="mr-3" required>
-                            <span class="text-sm">Pelanggaran privasi</span>
-                        </label>
-                        
-                        <label class="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                            <input type="radio" name="reason" value="Lainnya" class="mr-3" required>
-                            <span class="text-sm">Lainnya</span>
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="flex space-x-3">
-                    <button type="button" onclick="closeReportModal()"
-                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
-                        Batal
-                    </button>
-                    <button type="submit" id="report-submit-btn"
-                            class="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium">
-                        Kirim Laporan
-                    </button>
-                </div>
-            </form>
-        </div>
-    `;
-
-    modal.onclick = function() {
-        closeReportModal();
-    };
-    document.body.appendChild(modal);
-}
-
-function closeReportModal() {
-    const modal = document.getElementById('report-modal-overlay');
-    if (modal) modal.remove();
-}
-
-function submitReport(event, postId) {
-    event.preventDefault();
-
-    const form = event.target;
-    const submitBtn = document.getElementById('report-submit-btn');
-    const selectedReason = form.querySelector('input[name="reason"]:checked');
-
-    if (!selectedReason) {
-        alert('Pilih alasan laporan terlebih dahulu');
-        return;
-    }
-
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Mengirim...';
-
-    const formData = new FormData();
-    formData.append('post_id', postId);
-    formData.append('reason', selectedReason.value);
-
-    fetch('/Sinergi/index.php?page=post-api&method=addReport', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success' || data.status === true) {
-                alert('✓ Laporan berhasil dikirim. Tim kami akan meninjau konten ini.');
-                closeReportModal();
-            } else {
-                alert('Gagal: ' + (data.message || 'Terjadi kesalahan'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Terjadi kesalahan koneksi');
-        })
-        .finally(() => {
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Kirim Laporan';
-        });
-}
-
-window.openReportModal = openReportModal;
-window.closeReportModal = closeReportModal;
-window.submitReport = submitReport;
 </script>
 
 <style>
-.filter-red {
-    filter: invert(37%) sepia(93%) saturate(3646%) hue-rotate(335deg) brightness(97%) contrast(96%);
-    transform: scale(1.15);
-}
-
-.icon-transition {
-    transition: filter 0.3s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.break-words {
-    word-break: break-word;
-}
-
+/* Animasi Loading */
 @keyframes pulse {
 
     0%,
