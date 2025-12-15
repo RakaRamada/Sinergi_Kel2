@@ -161,6 +161,37 @@
             </button>
         </form>
     </div>
+
+    <div id="deleteForumModal"
+        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm transition-opacity opacity-0 pointer-events-none"
+        style="transition: opacity 0.2s ease-out;">
+
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform scale-95 transition-transform duration-200"
+            id="deleteForumContent">
+            <div class="text-center">
+                <div class="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-red-100 mb-4">
+                    <svg class="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                </div>
+                <h3 class="text-lg leading-6 font-bold text-gray-900">Hapus Diskusi?</h3>
+                <p class="text-sm text-gray-500 mt-2">
+                    Postingan ini akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.
+                </p>
+            </div>
+            <div class="mt-6 flex gap-3">
+                <button type="button" onclick="closeDeleteForumModal()"
+                    class="w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-4 py-2.5 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none transition cursor-pointer">
+                    Batal
+                </button>
+                <button type="button" id="confirmDeleteForumBtn"
+                    class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2.5 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none transition cursor-pointer shadow-red-200">
+                    Hapus
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -222,30 +253,74 @@ function toggleLike(btn, postId) {
 }
 
 // 4. Hapus Postingan
+let forumIdToDelete = null;
+
+// GANTI FUNGSI LAMA DENGAN INI
 function deleteForumPost(postId) {
-    if (!confirm('Yakin ingin menghapus diskusi ini?')) return;
+    forumIdToDelete = postId;
+    const modal = document.getElementById('deleteForumModal');
+    const content = document.getElementById('deleteForumContent');
 
-    const fd = new FormData();
-    fd.append('post_id', postId);
+    // Tampilkan Modal dengan Animasi
+    modal.classList.remove('hidden');
+    // Force reflow
+    void modal.offsetWidth;
 
-    // URL sudah benar (menuju Router Index)
-    fetch('index.php?page=api-delete-forum-post', {
-            method: 'POST',
-            body: fd
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'success') {
-                location.reload();
-            } else {
-                alert(data.message || 'Gagal menghapus postingan');
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            alert('Terjadi kesalahan koneksi');
-        });
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.classList.add('opacity-100');
+
+    content.classList.remove('scale-95');
+    content.classList.add('scale-100');
 }
+
+function closeDeleteForumModal() {
+    forumIdToDelete = null;
+    const modal = document.getElementById('deleteForumModal');
+    const content = document.getElementById('deleteForumContent');
+
+    modal.classList.remove('opacity-100');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+
+    content.classList.remove('scale-100');
+    content.classList.add('scale-95');
+
+    setTimeout(() => {
+        modal.classList.add('hidden');
+    }, 200); // Tunggu animasi selesai
+}
+
+// Event Listener Tombol Konfirmasi
+document.getElementById('confirmDeleteForumBtn').addEventListener('click', function() {
+    if (forumIdToDelete) {
+        // Ubah tombol jadi loading
+        this.innerHTML =
+            '<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+        this.disabled = true;
+
+        const fd = new FormData();
+        fd.append('post_id', forumIdToDelete);
+
+        fetch('index.php?page=api-delete-forum-post', {
+                method: 'POST',
+                body: fd
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    location.reload();
+                } else {
+                    alert(data.message || 'Gagal menghapus');
+                    closeDeleteForumModal();
+                    this.innerHTML = 'Hapus';
+                    this.disabled = false;
+                }
+            })
+            .catch(err => {
+                alert('Koneksi Error');
+                closeDeleteForumModal();
+            });
+    }
+});
 
 // 5. Modal Gambar Besar
 function openImageModal(src) {

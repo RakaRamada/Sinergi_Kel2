@@ -89,44 +89,77 @@ class MessageController {
         $group_id = (int)$_POST['group_id']; 
         $sender_id = (int)$_SESSION['user_id'];
         
+        // Cek Member
         if (!$this->groupModel->isGroupMember($sender_id, $group_id)) {
             $this->sendJson(['error' => 'Anda bukan anggota grup ini.']);
         }
 
-        $isi_pesan = trim($_POST['isi_pesan'] ?? ''); 
-        $file = $_FILES['file_upload'] ?? null;
+        $isi_pesan = trim($_POST['isi_pesan'] ?? '');
         $reply_to_message_id = (int)($_POST['reply_to_message_id'] ?? 0);
 
-        if (empty($isi_pesan) && (empty($file) || $file['error'] !== UPLOAD_ERR_OK)) {
-            $this->sendJson(['error' => 'Pesan kosong'], 400);
+        // --- PERBAIKAN VALIDASI MULTI FILE ---
+        // Cek apakah ada file yang dipilih di array upload
+        $has_file = (isset($_FILES['file_upload']) && !empty($_FILES['file_upload']['name'][0]));
+
+        // Jika Teks Kosong DAN Tidak Ada File -> Error
+        if (empty($isi_pesan) && !$has_file) {
+            $this->sendJson(['error' => 'Pesan atau gambar tidak boleh kosong'], 400);
         }
 
+        $full_paths_arr = []; 
+        $original_filenames_arr = [];
         $message_type = 'text';
-        $file_path_to_db = null;
-        $original_filename = null;
 
-        if ($file && $file['error'] === UPLOAD_ERR_OK) {
-            $upload_dir = __DIR__ . '/../../public/uploads/group_files/'; 
+        // Base URL sesuai request Dosen
+        $web_base_path = '/Sinergi/public/uploads/group_files/';
+
+        if (isset($_FILES['file_upload']) && !empty($_FILES['file_upload']['name'][0])) {
+            $upload_dir = __DIR__ . '/../../public/uploads/group_files/';
             if (!is_dir($upload_dir)) mkdir($upload_dir, 0775, true);
 
-            $original_filename = basename($file['name']);
-            $extension = strtolower(pathinfo($original_filename, PATHINFO_EXTENSION));
-            $file_path_to_db = uniqid('chat_', true) . '.' . $extension;
+            $count_files = count($_FILES['file_upload']['name']);
             
-            if (in_array($extension, ['jpg', 'jpeg', 'png', 'gif'])) {
-                $message_type = 'image';
-            } elseif (in_array($extension, ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'])) {
-                $message_type = 'document';
+            // Validasi Max 5
+            if ($count_files > 5) {
+                $this->sendJson(['error' => 'Maksimal 5 gambar'], 400);
             }
 
-            if (!move_uploaded_file($file['tmp_name'], $upload_dir . $file_path_to_db)) {
-                $this->sendJson(['error' => 'Gagal upload file.'], 500);
+            for ($i = 0; $i < $count_files; $i++) {
+                if ($_FILES['file_upload']['error'][$i] === UPLOAD_ERR_OK) {
+                    $tmp = $_FILES['file_upload']['tmp_name'][$i];
+                    $name = $_FILES['file_upload']['name'][$i];
+                    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+                    
+                    // Nama file unik di folder
+                    $disk_filename = uniqid('chat_', true) . $i . '.' . $ext;
+                    
+                    // Cek Tipe
+                    if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                        $message_type = 'image';
+                    } elseif (in_array($ext, ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'])) {
+                        $message_type = 'document';
+                    }
+
+                    if (move_uploaded_file($tmp, $upload_dir . $disk_filename)) {
+                        // REQ DOSEN: Simpan FULL PATH ke array
+                        // Contoh: /Sinergi/public/uploads/group_files/chat_123.jpg
+                        $full_paths_arr[] = $web_base_path . $disk_filename;
+                        
+                        $original_filenames_arr[] = $name;
+                    }
+                }
             }
         }
-        
+
+        // GABUNGKAN JADI SATU STRING DIPISAH KOMA
+        // Hasil: "/Sinergi/.../img1.jpg,/Sinergi/.../img2.jpg"
+        $file_path_string = !empty($full_paths_arr) ? implode(',', $full_paths_arr) : null;
+        $original_name_string = !empty($original_filenames_arr) ? implode(',', $original_filenames_arr) : null;
+
+        // SIMPAN KE DB (Pake Model Lama Aja, Gak Perlu Ubah Model!)
         $newMessageId = $this->messageModel->createMessage(
             $group_id, $sender_id, $isi_pesan, $message_type, 
-            $file_path_to_db, $original_filename, $reply_to_message_id
+            $file_path_string, $original_name_string, $reply_to_message_id
         );
         
         if ($newMessageId) {
@@ -162,23 +195,45 @@ class MessageController {
     }
 
     public function deleteMessageController() {
+        // 1. BERSIHKAN BUFFER (Hapus spasi/enter bandel)
+        while (ob_get_level()) ob_end_clean();
+        
+        header('Content-Type: application/json');
+        ini_set('display_errors', 0);
+        error_reporting(0);
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_SESSION['user_id'])) {
-            $this->sendJson(['error' => 'Akses ditolak'], 403);
+            echo json_encode(['status' => 'error', 'message' => 'Akses ditolak']);
+            exit;
         }
 
-        $data = json_decode(file_get_contents('php://input'), true);
+        $input = file_get_contents('php://input');
+        $data = json_decode($input, true);
         $message_id = $data['message_id'] ?? 0;
         $user_id = (int)$_SESSION['user_id'];
 
-        if (empty($message_id)) $this->sendJson(['error' => 'Invalid ID'], 400);
-
-        $success = $this->messageModel->deleteMessage($message_id, $user_id);
-        
-        if ($success) {
-            $this->sendJson(['success' => true]);
-        } else {
-            $this->sendJson(['error' => 'Gagal hapus'], 500);
+        if (empty($message_id)) {
+            echo json_encode(['status' => 'error', 'message' => 'Invalid ID']);
+            exit;
         }
+
+        $isDeleted = $this->messageModel->deleteMessage($message_id, $user_id);
+        
+        // 2. KIRIM SINYAL GANDA
+        if ($isDeleted) {
+            echo json_encode([
+                'status' => 'success', 
+                'success' => true,
+                'message' => 'Berhasil dihapus'
+            ]);
+        } else {
+            echo json_encode([
+                'status' => 'error', 
+                'success' => false,
+                'message' => 'Gagal menghapus (DB Error)'
+            ]);
+        }
+        exit; // Pastikan berhenti disini
     }
 
     public function getSidebarUpdates() {
@@ -189,4 +244,3 @@ class MessageController {
         $this->sendJson($groups);
     }
 }
-?>

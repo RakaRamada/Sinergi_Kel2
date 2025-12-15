@@ -261,7 +261,19 @@
                 class="flex gap-3 items-end max-w-3xl mx-auto">
                 <input type="hidden" name="parent_id" id="parent_id_input" value="">
                 <?php 
-                    $my_avatar = !empty($_SESSION['avatar_url']) ? '/Sinergi/public/uploads/avatars/' . $_SESSION['avatar_url'] : '/Sinergi/public/assets/images/user.png';
+                    // FIX LOGIKA AVATAR (Mencegah Double Path)
+                    $sess_avatar = $_SESSION['avatar_url'] ?? '';
+                    
+                    if (empty($sess_avatar)) {
+                        // Jika kosong, pakai default
+                        $my_avatar = '/Sinergi/public/assets/images/user.png';
+                    } elseif (strpos($sess_avatar, '/') !== false) {
+                        // Jika sudah ada tanda slash '/', berarti sudah full path -> Pakai apa adanya
+                        $my_avatar = $sess_avatar;
+                    } else {
+                        // Jika cuma nama file, baru kita tambahkan path foldernya
+                        $my_avatar = '/Sinergi/public/uploads/avatars/' . $sess_avatar;
+                    }
                 ?>
                 <img src="<?= $my_avatar ?>" class="w-8 h-8 rounded-full object-cover border hidden sm:block">
                 <div

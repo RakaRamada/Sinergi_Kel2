@@ -26,7 +26,10 @@ if (empty($page)) {
 // 3. WHITELISTS
 $public_pages = [
     'login', 'login-process', 'register', 'register-process', 
-    'verify', 'captcha', 'process-login'
+    'verify', 'captcha', 'process-login', 'forgot-password', 
+    'forgot-password-process', 
+    'reset-password', 
+    'reset-password-process'
 ];
 
 $admin_pages = [
@@ -197,6 +200,13 @@ switch ($page) {
 
     // --- SEARCH ---
     case 'search':          $searchController->showSearchPage(); break;
+    
+    // LUPA PASSWORD 
+    case 'forgot-password':         $authController->showForgotPassword(); break;
+    case 'forgot-password-process': $authController->doForgotPassword(); break;
+    case 'reset-password':          $authController->showResetPassword(); break;
+    case 'reset-password-process':  $authController->doResetPassword(); break;
+
 
     // --- ADMIN ---
     case 'admin-dashboard':     if(isset($adminController)) $adminController->dashboard(); break;
@@ -210,9 +220,6 @@ switch ($page) {
     // --- MISC ---
     case 'captcha':         
         require_once 'app/helpers/captcha.php'; 
-        break;
-    case 'settings':
-        require_once 'app/views/settings.php';
         break;
 
     // --- DEFAULT ---

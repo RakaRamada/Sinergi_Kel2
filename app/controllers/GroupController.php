@@ -8,7 +8,7 @@ require_once __DIR__ . '/../models/MessageModel.php';
 require_once __DIR__ . '/../models/NotificationModel.php';
 require_once __DIR__ . '/../models/UserModel.php';
 
-class GroupController {
+class GroupController { 
 
     private $conn;
     private $groupModel;
@@ -34,11 +34,67 @@ class GroupController {
 
     // --- CREATE GROUP ---
     public function showCreateForm() {
+        // 1. CEK LOGIN
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (!isset($_SESSION['user_id'])) {
+            header('Location: index.php?page=login'); exit();
+        }
+
+        // 2. CEK ROLE (Hanya Mhs/Dosen & Admin)
+        $role_id = $_SESSION['role_id'] ?? 0;
+        if (in_array($role_id, [3, 4])) {
+            header('Location: index.php?page=messages&error=restricted_access'); 
+            exit();
+        }
+
+        // ============================================================
+        // 3. COPY LOGIKA DARI NOTIFICATION CONTROLLER
+        // ============================================================
+        
+        // Ambil data pakai nama variabel yang dikenali sidebar ($recommended...)
+        // Kita pakai $this->userModel karena sudah ada di construct GroupController
+        $recommendedUsers = $this->userModel->getTopActiveUsers(5); 
+        $recommendedGroups = $this->groupModel->getPopularGroups(5);
+
+        // --- LOGIKA FIX PATH GAMBAR (PENTING AGAR GAMBAR MUNCUL) ---
+        // Loop User
+        if (is_array($recommendedUsers)) {
+            foreach ($recommendedUsers as &$u) {
+                if(empty($u['avatar_url'])) {
+                    $u['avatar_url'] = '/Sinergi/public/assets/images/user.png';
+                } elseif(strpos($u['avatar_url'], '/') === false) {
+                    $u['avatar_url'] = '/Sinergi/public/uploads/avatars/' . $u['avatar_url'];
+                }
+            }
+        }
+
+        // Loop Grup
+        if (is_array($recommendedGroups)) {
+            foreach ($recommendedGroups as &$g) {
+                $img = $g['group_image'] ?? '';
+                if (!empty($img)) {
+                    $g['group_image'] = '/Sinergi/public/uploads/group_profiles/' . $img;
+                } else {
+                    $g['group_image'] = '/Sinergi/public/assets/images/user.png'; // Default
+                }
+            }
+        }
+
+        // ============================================================
+        // 4. PANGGIL VIEW
+        // ============================================================
+        // Variabel $recommendedUsers & $recommendedGroups otomatis mengalir ke sini
         require __DIR__ . '/../views/create_group.php';
     }
 
     public function storeGroup() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id'])) {
+
+            $role_id = $_SESSION['role_id'] ?? 0;
+            if (in_array($role_id, [3, 4])) {
+                header('Location: index.php?page=messages&error=restricted_access'); 
+                exit();
+            }
             $nama_group = trim($_POST['nama_group']);
             $deskripsi = trim($_POST['deskripsi']);
             $is_private = isset($_POST['is_private']) ? (int)$_POST['is_private'] : 0;
@@ -312,23 +368,47 @@ class GroupController {
     }
 
     public function handleDeleteGroup() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $actor_id = (int)$_SESSION['user_id'];
-            $group_id = (int)$_POST['group_id'];
-
-            // Cek Owner
-            $actorRole = $this->groupModel->getUserRole($actor_id, $group_id);
-            if ($actorRole !== 'owner') {
-                header("Location: index.php?page=group-details&group_id=$group_id&error=not_owner"); exit();
-            }
-
-            if ($this->groupModel->deleteGroup($group_id)) {
-                header("Location: index.php?page=messages&success=group_deleted");
-            } else {
-                header("Location: index.php?page=edit-group&group_id=$group_id&error=delete_failed");
-            }
-            exit();
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        
+        // 1. Cek Login
+        if (!isset($_SESSION['user_id'])) {
+            header('Location: index.php?page=login');
+            exit;
         }
+
+        // 2. Ambil ID Grup (Prioritaskan dari POST karena pakai Form)
+        $group_id = 0;
+        if (isset($_POST['group_id'])) {
+            $group_id = (int)$_POST['group_id'];
+        } elseif (isset($_GET['id'])) {
+            $group_id = (int)$_GET['id'];
+        }
+
+        // Validasi ID
+        if ($group_id <= 0) {
+            echo "<h3>Error: ID Grup Invalid</h3>";
+            echo "<p>Pastikan form mengirim name='group_id'.</p>";
+            exit;
+        }
+
+        $user_id = (int)$_SESSION['user_id'];
+
+        // 3. EKSEKUSI HAPUS (Kirim 2 Parameter: ID Grup & ID User)
+        // --- INI YANG BIKIN ERROR TADI (Dulu cuma $group_id) ---
+        $success = $this->groupModel->deleteGroup($group_id, $user_id); 
+        // -------------------------------------------------------
+
+        if ($success) {
+            // Sukses Hapus -> Redirect ke Halaman Pesan
+            header('Location: index.php?page=messages&success=group_deleted');
+        } else {
+            // Gagal Hapus -> Kembalikan dan kasih pesan
+            echo "<script>
+                    alert('Gagal menghapus! Pastikan Anda adalah Owner grup ini.'); 
+                    window.location.href='index.php?page=edit-group&group_id=$group_id';
+                  </script>";
+        }
+        exit;
     }
 
     // --- REQUEST & INVITE ---
@@ -389,21 +469,33 @@ class GroupController {
         }
         $user_id = (int)$_SESSION['user_id'];
         $group_id = (int)$_GET['group_id'];
+        $role_id = (int)($_SESSION['role_id'] ?? 0); // Ambil Role User
 
-        // 1. Ambil Info Dasar Grup
+        // 1. Ambil Info Dasar Grup (Asli dari DB)
         $group_info = $this->groupModel->getGroupById($group_id);
         if (!$group_info) {
             header('Location: index.php?page=search&tab=group&error=not_found'); exit();
         }
         
+        // --- LOGIKA BARU: PAKSA PRIVAT UNTUK EKSTERNAL ---
+        // Jika Alumni (3) atau Mitra (4), kita manipulasi data group_info
+        // seolah-olah grup ini adalah PRIVATE, apapun status aslinya.
+        $is_external_user = in_array($role_id, [3, 4]);
+        
+        if ($is_external_user) {
+            $group_info['is_private'] = 1; // Override status jadi Privat
+        }
+        // --------------------------------------------------
+
         // 2. Cek Status Member User Ini
         $is_member = $this->groupModel->isGroupMember($user_id, $group_id);
         
-        // 3. Cek Apakah Super Admin (Role ID 5) -> Opsional, biar admin bisa intip
-        $is_global_admin = (isset($_SESSION['role_id']) && $_SESSION['role_id'] == 5);
+        // 3. Cek Apakah Super Admin (Role ID 5)
+        $is_global_admin = ($role_id == 5);
 
         // 4. LOGIKA KUNCI (LOCK)
-        // Terkunci jika: Grup Privat AND User Bukan Member AND User Bukan Super Admin
+        // Sekarang logika ini akan otomatis mengunci grup publik bagi Alumni
+        // karena $group_info['is_private'] sudah kita ubah jadi 1 di atas.
         $is_locked = ($group_info['is_private'] == 1 && !$is_member && !$is_global_admin);
 
         // 5. Ambil Konten Sensitif HANYA Jika TIDAK Terkunci
@@ -412,28 +504,24 @@ class GroupController {
             $group_media = $this->messageModel->getMediaByGroupId($group_id);
             $group_documents = $this->messageModel->getDocumentsByGroupId($group_id);
         } else {
-            // Jika terkunci, kosongkan data agar tidak bocor ke View
             $group_members = [];
             $group_media = [];
             $group_documents = [];
         }
 
-        // 6. Data Management (Khusus Owner/Admin Grup untuk acc member)
+        // 6. Data Management
         $can_manage = $this->canManageGroup($user_id, $group_id);
         $pending_members = [];
         
-        // Hanya owner/admin yang bisa lihat pending request
         if ($can_manage && $group_info['is_private']) {
             $pending_members = $this->groupModel->getPendingMembers($group_id);
         }
         
-        // Tambahan: Helper untuk View mengetahui role user di grup ini (untuk tombol Edit/Leave)
         $myRole = $this->groupModel->getUserRole($user_id, $group_id);
         $is_owner = ($myRole === 'owner');
 
         $view = $_GET['view'] ?? 'diskusi';
         
-        // Load View dengan variabel baru ($is_locked, $is_member, dll)
         require __DIR__ . '/../views/group_details.php';
     }
 }

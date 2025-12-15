@@ -5,6 +5,9 @@
 $pesan = $pesan ?? '';
 $old_email = $old_email ?? ''; // Menangkap email lama dari Controller
 
+$old_pass = $_SESSION['temp_pass'] ?? '';
+unset($_SESSION['temp_pass']);
+
 // Pastikan koneksi tersedia
 global $conn;
 if (!isset($conn) || !$conn) {
@@ -66,19 +69,20 @@ if (!isset($conn) || !$conn) {
                         <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
                         <div class="relative">
                             <input type="password" id="password" name="password" placeholder="Password" required
+                                value="<?= htmlspecialchars($old_pass); ?>"
                                 class="w-full border border-gray-300 rounded-lg py-3 px-4 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500">
 
-                            <!-- Toggle Password Visibility -->
                             <span class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer"
                                 onclick="togglePasswordVisibility()">
-                                <img id="togglePasswordIcon" src="public/assets/icons/eyeClosed.svg"
-                                    alt="Toggle password visibility" class="w-5 h-5 text-gray-400">
+                                <img id="togglePasswordIcon" src="public/assets/icons/eyeClosed.svg" alt="Toggle"
+                                    class="w-5 h-5 text-gray-400">
                             </span>
                         </div>
                     </div>
 
                     <div class="text-right text-sm">
-                        <a href="#" class="font-semibold text-blue-600 hover:underline">Lupa password?</a>
+                        <a href="index.php?page=forgot-password"
+                            class="font-semibold text-blue-600 hover:underline">Lupa password?</a>
                     </div>
 
                     <!-- CAPTCHA Section -->

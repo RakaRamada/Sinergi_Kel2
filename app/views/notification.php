@@ -87,7 +87,7 @@ if (!function_exists('time_elapsed_string_notif')) {
             <p class="text-gray-400 italic">Belum ada riwayat notifikasi.</p>
         </div>
         <?php else: ?>
-        <div class="mb-4 p-3 bg-blue-50 text-blue-700 text-xs flex items-center gap-2 rounded border border-blue-100">
+        <div class="mb-4 p-3 bg-gray-50 text-gray-700 text-xs flex items-center gap-2 rounded border border-gray-100">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -213,19 +213,22 @@ function renderNotifCard($notif, $is_unread) {
     $target_url = ""; 
     $final_link = "#";
 
-    // --- 1. TENTUKAN TUJUAN URL ---
+    // Prioritas 1: Invite (Tidak ada link klik, hanya tombol)
     if ($notif['type'] == 'group_invite') { 
-        $target_url = ""; // Invite tidak ada link klik (pakai tombol terima/tolak)
+        $target_url = ""; 
     } 
-    elseif (!empty($notif['related_group_id'])) {
-        $target_url = "index.php?page=group-details&group_id=" . $notif['related_group_id'];
-    } 
+    // Prioritas 2: Postingan Forum (LEBIH SPESIFIK) -> Cek ini DULU sebelum cek Group ID
     elseif (!empty($notif['related_forum_post_id'])) {
         $target_url = "index.php?page=forum-post-detail&post_id=" . $notif['related_forum_post_id'];
     } 
+    // Prioritas 3: Postingan Dashboard (Personal Feed)
     elseif (!empty($notif['related_post_id'])) {
         $target_url = "index.php?page=post-detail&id=" . $notif['related_post_id'];
     } 
+    // Prioritas 4: Grup Umum (Hanya jika TIDAK ADA forum_post_id)
+    elseif (!empty($notif['related_group_id'])) {
+        $target_url = "index.php?page=group-details&group_id=" . $notif['related_group_id'];
+    }
 
     // --- 2. LOGIKA GENERATE LINK FINAL ---
     if (!empty($target_url)) {
@@ -247,7 +250,7 @@ function renderNotifCard($notif, $is_unread) {
         }
     }
 
-    $bg_class = $is_unread ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-gray-100 opacity-75';
+    $bg_class = $is_unread ? 'bg-gray-50 border-gray-200 shadow-sm' : 'bg-white border-gray-100 opacity-75';
     // Cursor pointer hanya muncul jika ada link yang bisa diklik
     $cursor_class = ($final_link !== '#') ? 'cursor-pointer hover:shadow-md' : 'cursor-default';
     

@@ -25,6 +25,26 @@ class NotificationController {
         }
 
         $user_id = (int)$_SESSION['user_id'];
+
+        require_once __DIR__ . '/../models/UserModel.php';
+        require_once __DIR__ . '/../models/GroupModel.php';
+        $uModel = new UserModel($this->conn);
+        $gModel = new GroupModel($this->conn);
+
+        $recommendedUsers = $uModel->getTopActiveUsers(5, $user_id);
+        // Perlu logika fix avatar path manual jika class ini tidak punya helper
+        foreach ($recommendedUsers as &$u) {
+            if(empty($u['avatar_url'])) $u['avatar_url'] = '/Sinergi/public/assets/images/user.png';
+            elseif(strpos($u['avatar_url'], '/') === false) $u['avatar_url'] = '/Sinergi/public/uploads/avatars/' . $u['avatar_url'];
+        }
+
+        $recommendedGroups = $gModel->getPopularGroups(5);
+        foreach ($recommendedGroups as &$g) {
+            $g['group_image'] = !empty($g['group_image']) 
+                 ? '/Sinergi/public/uploads/group_profiles/' . $g['group_image'] 
+                 : '/Sinergi/public/assets/images/user.png';
+        }
+        
         $data = $this->notifModel->getUserNotifications($user_id);
         
         $unread_list = $data['unread'];

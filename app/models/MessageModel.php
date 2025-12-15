@@ -307,5 +307,4 @@ class MessageModel {
             $row[$field] = $row[$field]->read($row[$field]->size());
         }
     }
-}
-?>
+}   

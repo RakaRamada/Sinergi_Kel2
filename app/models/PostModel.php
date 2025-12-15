@@ -29,9 +29,11 @@ class PostModel {
                     NVL(p.comment_count, 0) as COMMENT_COUNT, 
                     TO_CHAR(p.created_at, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_AT_STR,
                     u.username, u.nama_lengkap, u.avatar_url,
+                    r.role_name,  
                     (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.post_id AND l.user_id = :p_curr_uid) AS USER_SUDAH_LIKE
                 FROM postingan p
                 JOIN users u ON p.user_id = u.user_id
+                JOIN roles r ON u.role_id = r.role_id 
                 ORDER BY p.created_at DESC";
 
         $stmt = oci_parse($this->conn, $sql);
@@ -51,15 +53,18 @@ class PostModel {
      * Mengambil postingan spesifik milik satu user (Halaman Profil)
      */
     public function getPostsByUserId($target_user_id, $current_user_id) {
+        // UPDATE: Tambah r.role_name dan JOIN roles r
         $sql = "SELECT 
                     p.post_id, p.user_id, p.konten, p.post_image,
                     NVL(p.like_count, 0) as LIKE_COUNT,       
                     NVL(p.comment_count, 0) as COMMENT_COUNT, 
                     TO_CHAR(p.created_at, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_AT_STR,
                     u.username, u.nama_lengkap, u.avatar_url,
+                    r.role_name,
                     (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.post_id AND l.user_id = :p_curr_uid) AS USER_SUDAH_LIKE
                 FROM postingan p
                 JOIN users u ON p.user_id = u.user_id
+                JOIN roles r ON u.role_id = r.role_id
                 WHERE p.user_id = :p_target_uid
                 ORDER BY p.created_at DESC";
 
@@ -83,13 +88,16 @@ class PostModel {
      * Mengambil Detail satu postingan
      */
     public function getPostById($post_id) {
+        // UPDATE: Tambah r.role_name dan JOIN roles r
         $sql = "SELECT p.*, 
                        TO_CHAR(p.created_at, 'YYYY-MM-DD HH24:MI:SS') as WAKTU_FIX,
                        u.username, u.nama_lengkap, u.avatar_url,
+                       r.role_name,
                        NVL(p.like_count, 0) as LIKE_COUNT,
                        NVL(p.comment_count, 0) as COMMENT_COUNT
                 FROM postingan p
                 JOIN users u ON p.user_id = u.user_id
+                JOIN roles r ON u.role_id = r.role_id
                 WHERE p.post_id = :p_pid";
 
         $stmt = oci_parse($this->conn, $sql);

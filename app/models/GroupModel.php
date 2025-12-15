@@ -559,20 +559,72 @@ class GroupModel {
     /**
      * BARU: Hapus Grup Total (Fitur Super Owner)
      */
-    public function deleteGroup($group_id) {
-        $sql = "DELETE FROM groups WHERE group_id = :p_gid";
+    public function deleteGroup($group_id, $owner_id) {
+        // 1. Cek Owner (Kolom: created_by_user_id)
+        $checkSql = "SELECT group_id FROM groups WHERE group_id = :p_chk_gid AND created_by_user_id = :p_chk_uid";
+        $stmtCheck = oci_parse($this->conn, $checkSql);
         
-        $stmt = oci_parse($this->conn, $sql);
-        $clean_id = (int)$group_id;
-        oci_bind_by_name($stmt, ':p_gid', $clean_id);
+        // Bind parameter
+        oci_bind_by_name($stmtCheck, ':p_chk_gid', $group_id);
+        oci_bind_by_name($stmtCheck, ':p_chk_uid', $owner_id);
         
-        if (oci_execute($stmt, OCI_COMMIT_ON_SUCCESS)) {
-            return true;
-        } else {
-            $e = oci_error($stmt);
-            error_log("Gagal Hapus Grup: " . $e['message']);
-            return false;
+        if (!oci_execute($stmtCheck)) {
+            $e = oci_error($stmtCheck); die("ERROR CEK OWNER: " . $e['message']);
         }
+        
+        if (!oci_fetch_assoc($stmtCheck)) {
+            // Jika tidak ketemu, berarti ID salah atau user bukan owner
+            return false; 
+        }
+        oci_free_statement($stmtCheck);
+
+        // === FASE BERSIH-BERSIH (CASCADE MANUAL) ===
+
+        // A. Hapus Notifikasi (FIX: Pakai RELATED_GROUP_ID)
+        $sqlNotif = "DELETE FROM notifications WHERE related_group_id = :p_del_gid";
+        $stmtNotif = oci_parse($this->conn, $sqlNotif);
+        oci_bind_by_name($stmtNotif, ':p_del_gid', $group_id);
+        
+        if (!oci_execute($stmtNotif, OCI_NO_AUTO_COMMIT)) {
+            $e = oci_error($stmtNotif); die("ERROR HAPUS NOTIF: " . $e['message']);
+        }
+        oci_free_statement($stmtNotif);
+
+        // B. Hapus Member (Kolom: group_id)
+        $sqlMem = "DELETE FROM group_members WHERE group_id = :p_del_gid";
+        $stmtMem = oci_parse($this->conn, $sqlMem);
+        oci_bind_by_name($stmtMem, ':p_del_gid', $group_id);
+        
+        if (!oci_execute($stmtMem, OCI_NO_AUTO_COMMIT)) {
+            $e = oci_error($stmtMem); die("ERROR HAPUS MEMBER: " . $e['message']);
+        }
+        oci_free_statement($stmtMem);
+
+        // C. Hapus Pesan (Kolom: group_id)
+        // (Tidak perlu hapus message_attachments karena tabelnya tidak ada)
+        $sqlMsg = "DELETE FROM messages WHERE group_id = :p_del_gid";
+        $stmtMsg = oci_parse($this->conn, $sqlMsg);
+        oci_bind_by_name($stmtMsg, ':p_del_gid', $group_id);
+        
+        if (!oci_execute($stmtMsg, OCI_NO_AUTO_COMMIT)) {
+            $e = oci_error($stmtMsg); die("ERROR HAPUS MESSAGES: " . $e['message']);
+        }
+        oci_free_statement($stmtMsg);
+
+        // === FASE FINAL: HAPUS GRUP ===
+        $sqlGroup = "DELETE FROM groups WHERE group_id = :p_del_gid";
+        $stmtGroup = oci_parse($this->conn, $sqlGroup);
+        oci_bind_by_name($stmtGroup, ':p_del_gid', $group_id);
+
+        if (!oci_execute($stmtGroup, OCI_NO_AUTO_COMMIT)) {
+            $e = oci_error($stmtGroup);
+            oci_rollback($this->conn); // Batalkan semua jika induk gagal dihapus
+            die("ERROR HAPUS GRUP UTAMA: " . $e['message']);
+        }
+
+        // Jika sampai sini, berarti sukses semua. COMMIT!
+        oci_commit($this->conn);
+        return true;
     }
 
     /**
@@ -587,5 +639,31 @@ class GroupModel {
         $row = oci_fetch_assoc($stmt);
         return $row ? strtolower($row['ROLE']) : null;
     }
+
+    /**
+     * Mengambil grup terpopuler berdasarkan jumlah member
+     */
+    public function getPopularGroups($limit = 5) {
+        $sql = "SELECT g.group_id, g.nama_group, g.group_image, g.is_private,
+                       (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.group_id AND gm.status = 'active') as member_count
+                FROM groups g
+                ORDER BY member_count DESC
+                FETCH FIRST :p_limit ROWS ONLY";
+
+        $stmt = oci_parse($this->conn, $sql);
+        $clean_limit = (int)$limit;
+        oci_bind_by_name($stmt, ':p_limit', $clean_limit);
+
+        if (!oci_execute($stmt)) return [];
+
+        $groups = [];
+        while ($row = oci_fetch_assoc($stmt)) {
+            $groups[] = array_change_key_case($row, CASE_LOWER);
+        }
+        oci_free_statement($stmt);
+        return $groups;
+    }
 }
+
+
 ?>

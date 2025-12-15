@@ -28,6 +28,28 @@ class ProfileController {
         if (!isset($_SESSION['user_id'])) { header('Location: index.php?page=login'); exit; }
         
         $current_user_id = (int)$_SESSION['user_id'];
+        require_once __DIR__ . '/../models/UserModel.php';
+        require_once __DIR__ . '/../models/GroupModel.php';
+        
+        $uModel = new UserModel($this->conn);
+        $gModel = new GroupModel($this->conn);
+
+        $recommendedUsers = $uModel->getTopActiveUsers(5, $current_user_id);
+        // Fix Path Avatar
+        foreach ($recommendedUsers as &$u) {
+            $u['avatar_url'] = $this->fixUrl($u['avatar_url'], 'user.png'); // Pakai helper fixUrl yg sudah ada di class ini
+        }
+        unset($u);
+
+        $recommendedGroups = $gModel->getPopularGroups(5);
+        // Fix Path Group
+        foreach ($recommendedGroups as &$g) {
+            $g['group_image'] = !empty($g['group_image']) 
+                 ? '/Sinergi/public/uploads/group_profiles/' . $g['group_image'] 
+                 : '/Sinergi/public/assets/images/user.png';
+        }
+        unset($g);
+        
         $profile_user_id = isset($_GET['id']) ? (int)$_GET['id'] : $current_user_id;
         $is_my_profile = ($profile_user_id === $current_user_id);
 
@@ -98,7 +120,7 @@ class ProfileController {
                 $masa_studi = $tahun_sekarang - $tahun_masuk;
 
                 // Syarat: Minimal 3 tahun selisih
-                if ($masa_studi < 3) {
+                if ($masa_studi < 4) {
                     header('Location: index.php?page=edit_profile&error=belum_cukup_umur'); 
                     exit();
                 }

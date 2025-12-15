@@ -61,6 +61,23 @@
                     class="mt-1 block w-full bg-white px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
             </div>
 
+            <?php 
+            // Cek Role untuk label yang sesuai
+            $label_induk = '';
+            if ($user_data['ROLE_ID'] == 1) $label_induk = 'NIM';
+            elseif ($user_data['ROLE_ID'] == 2) $label_induk = 'NIP';
+            
+            // Tampilkan hanya jika role Mahasiswa atau Dosen
+            if ($label_induk): 
+            ?>
+            <div>
+                <label class="block text-sm font-medium text-gray-700"><?= $label_induk ?></label>
+                <input type="text" value="<?php echo htmlspecialchars($user_data['NOMOR_INDUK'] ?? '-'); ?>" readonly
+                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed shadow-sm text-gray-600">
+                <p class="mt-1 text-xs text-gray-500"><?= $label_induk ?> tidak dapat diubah.</p>
+            </div>
+            <?php endif; ?>
+
             <?php if (in_array($user_data['ROLE_ID'], [1, 3])): ?>
             <div class="bg-gray-50 p-5 rounded-xl border border-gray-200 space-y-4">
                 <h3 class="font-bold text-gray-900 text-sm flex items-center gap-2">
@@ -127,7 +144,7 @@
                     Batal
                 </a>
                 <button type="submit"
-                    class="bg-black text-white font-bold py-2 px-6 rounded-full hover:bg-gray-800 text-sm transition">
+                    class="bg-black text-white font-bold py-2 px-6 rounded-full hover:bg-gray-800 text-sm transition cursor-pointer">
                     Simpan Perubahan
                 </button>
             </div>

@@ -49,10 +49,18 @@ if (!function_exists('formatTanggalChat')) {
         <?php endif; ?>
     </div>
 
+    <?php 
+    $current_role_id = $_SESSION['role_id'] ?? 0;
+    // Cek: Jika BUKAN Alumni (3) dan BUKAN Mitra (4), baru tampilkan tombol
+    if (!in_array($current_role_id, [3, 4])): 
+    ?>
     <div class="p-4 border-t border-gray-200">
         <a href="index.php?page=create-group"
-            class="block w-full bg-black text-white text-center py-2 rounded-full font-bold">Buat Grup Baru</a>
+            class="block w-full bg-black text-white text-center py-2 rounded-full font-bold hover:bg-gray-800 transition">
+            Buat Grup Baru
+        </a>
     </div>
+    <?php endif; ?>
 </main>
 
 
@@ -121,7 +129,7 @@ const FORUM_ID = GROUP_ID; // Alias biar aman kalau ada script lama yg pake FORU
 </script>
 
 <?php if ($active_tab === 'chat'): ?>
-<script src="/Sinergi/public/assets/js/chat_app.js"></script>
+<script src="/Sinergi/public/assets/js/chat_app.js?v=<?= time() ?>"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {

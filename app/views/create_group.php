@@ -67,7 +67,7 @@
 
             <div class="pt-4 border-t border-gray-100 flex justify-end">
                 <button type="submit"
-                    class="bg-black text-white font-bold rounded-full py-2.5 px-8 hover:bg-gray-800 transition shadow-lg transform hover:-translate-y-0.5">
+                    class="bg-black text-white font-bold rounded-full py-2.5 px-8 hover:bg-gray-800 transition shadow-lg transform hover:-translate-y-0.5 cursor-pointer">
                     Buat Group
                 </button>
             </div>

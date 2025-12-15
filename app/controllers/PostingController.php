@@ -1,6 +1,6 @@
 <?php
 // File: app/controllers/PostingController.php
-// VERSI FINAL: FITUR DELETE COMMENT SUDAH AKTIF
+// VERSI FULL RECOVERY: SHOW POST DETAIL KEMBALI + FITUR BARU
 
 require_once __DIR__ . '/../../config/koneksi.php'; 
 require_once __DIR__ . '/../models/PostModel.php';
@@ -12,7 +12,6 @@ class PostingController {
     private $postModel;
     private $reportModel; 
     
-    // Path Default
     private $defaultAvatar = '/sinergi/public/assets/images/user.png';
     private $avatarUploadPath = '/sinergi/public/uploads/avatars/';
 
@@ -23,6 +22,7 @@ class PostingController {
         $this->reportModel = new ReportModel($dbConnection);
     }
 
+    // --- HELPER ---
     private function fixAvatarPath($url) {
         if (empty($url)) return $this->defaultAvatar;
         if (strpos($url, '/') !== false) return $url; 
@@ -31,20 +31,41 @@ class PostingController {
 
     private function sendJson($data) {
         while (ob_get_level()) ob_end_clean();
-        ini_set('display_errors', 0);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($data);
         exit;
     }
 
-    // --- VIEW METHODS ---
+    // ==================================================================
+    // 1. VIEW METHODS (HALAMAN)
+    // ==================================================================
+
     public function showDashboard() {
         if (session_status() === PHP_SESSION_NONE) session_start();
         $user_id = $_SESSION['user_id'] ?? null;
         if (!$user_id) { header('Location: index.php?page=login'); exit(); }
+
+        require_once __DIR__ . '/../models/UserModel.php';
+        require_once __DIR__ . '/../models/GroupModel.php';
+
+        $userModel = new UserModel($this->conn);
+        $groupModel = new GroupModel($this->conn);
+
+        // Sidebar Data
+        $recommendedUsers = $userModel->getTopActiveUsers(5, $user_id);
+        foreach ($recommendedUsers as &$u) {
+            $u['avatar_url'] = $this->fixAvatarPath($u['avatar_url']);
+        }
+        
+        $recommendedGroups = $groupModel->getPopularGroups(5);
+        foreach ($recommendedGroups as &$g) {
+            $g['group_image'] = !empty($g['group_image']) ? '/Sinergi/public/uploads/group_profiles/' . $g['group_image'] : '/Sinergi/public/assets/images/user.png';
+        }
+
         require 'app/views/dashboard.php';
     }
 
+    // --- [RESTORED] FUNGSI INI TADI HILANG ---
     public function showPostDetail() {
         $post_id = isset($_GET['id']) ? $_GET['id'] : 0;
         
@@ -55,10 +76,33 @@ class PostingController {
         $post = $this->postModel->getPostById($post_id);
         
         if(!$post){
-            require 'app/views/dashboard.php';
-            echo "<div class='container mx-auto p-4 mt-4 bg-white rounded shadow text-center'>Postingan tidak ditemukan.</div>"; return;
+            // Fallback jika post dihapus/tidak ketemu
+            require 'app/views/dashboard.php'; 
+            return;
         }
 
+        // --- SIDEBAR DATA (Supaya Sidebar Kanan Tetap Muncul) ---
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        $user_id = $_SESSION['user_id'] ?? 0;
+
+        require_once __DIR__ . '/../models/UserModel.php';
+        require_once __DIR__ . '/../models/GroupModel.php';
+
+        $userModel = new UserModel($this->conn);
+        $groupModel = new GroupModel($this->conn);
+
+        $recommendedUsers = $userModel->getTopActiveUsers(5, $user_id);
+        foreach ($recommendedUsers as &$u) {
+            $u['avatar_url'] = $this->fixAvatarPath($u['avatar_url']);
+        }
+
+        $recommendedGroups = $groupModel->getPopularGroups(5);
+        foreach ($recommendedGroups as &$g) {
+            $g['group_image'] = !empty($g['group_image']) ? '/Sinergi/public/uploads/group_profiles/' . $g['group_image'] : '/Sinergi/public/assets/images/user.png';
+        }
+        // -------------------------------------------------------
+
+        // Data Processing untuk View
         $post['AVATAR_URL_FIXED'] = $this->fixAvatarPath($post['AVATAR_URL']);
         $post['POST_IMAGE'] = $post['POST_IMAGE'] ?? '';
 
@@ -71,6 +115,7 @@ class PostingController {
         $post['TOTAL_LIKES'] = $post['LIKE_COUNT'] ?? 0;
         $post['TOTAL_COMMENTS'] = $post['COMMENT_COUNT'] ?? 0;
 
+        // Ambil Komentar & Reply
         $rawComments = $this->postModel->getParentComments($post_id);
         $comments = [];
 
@@ -91,23 +136,32 @@ class PostingController {
         require __DIR__ . '/../views/post_detail.php';
     }
 
-    // --- API METHODS ---
+    // ==================================================================
+    // 2. API METHODS (AJAX)
+    // ==================================================================
 
     public function getPostings() {
         $userId = $_SESSION['user_id'] ?? 0;
         if ($userId === 0) $this->sendJson(['status' => 'error', 'message' => 'Session expired']);
 
+        date_default_timezone_set('Asia/Jakarta');
+
         try {
             $posts = $this->postModel->getAllPosts($userId);
             $formatted = [];
+            $now = time();
+
             foreach ($posts as $row) {
                 $row['AVATAR_URL_FIXED'] = $this->fixAvatarPath($row['AVATAR_URL']);
+                
                 $timestamp = strtotime($row['CREATED_AT_STR']); 
                 if ($timestamp) {
-                    $diff = time() - $timestamp;
+                    $diff = $now - $timestamp;
+                    if ($diff < 0) $diff = 0;
+
                     if ($diff < 60) $row['WAKTU_POSTING'] = 'Baru saja';
-                    else if ($diff < 3600) $row['WAKTU_POSTING'] = floor($diff / 60) . 'm';
-                    else if ($diff < 86400) $row['WAKTU_POSTING'] = floor($diff / 3600) . 'j';
+                    else if ($diff < 3600) $row['WAKTU_POSTING'] = floor($diff / 60) . ' menit yang lalu';
+                    else if ($diff < 86400) $row['WAKTU_POSTING'] = floor($diff / 3600) . ' jam yang lalu';
                     else $row['WAKTU_POSTING'] = date('d M', $timestamp);
                 } else {
                     $row['WAKTU_POSTING'] = '-';
@@ -120,24 +174,55 @@ class PostingController {
         }
     }
 
+    // FITUR UPLOAD MULTI GAMBAR
     public function createPost() {
         if (!isset($_SESSION['user_id'])) $this->sendJson(['status' => 'error', 'message' => 'Belum login']);
+        
         $user_id = $_SESSION['user_id'];
         $konten = isset($_POST['konten']) ? trim($_POST['konten']) : '';
-        $has_image = (isset($_FILES['post_image']) && $_FILES['post_image']['error'] === UPLOAD_ERR_OK);
-
-        if (empty($konten) && !$has_image) $this->sendJson(['status' => 'error', 'message' => 'Konten kosong']);
-
+        
         $post_image_db = null;
-        if ($has_image) {
-            $upload_dir = __DIR__ . '/../../public/assets/uploads/'; 
-            if (!file_exists($upload_dir)) mkdir($upload_dir, 0777, true);
-            $file_ext = strtolower(pathinfo($_FILES['post_image']['name'], PATHINFO_EXTENSION));
-            if (!in_array($file_ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) $this->sendJson(['status' => 'error', 'message' => 'Format salah']);
-            $new_file_name = time() . '_' . uniqid() . '.' . $file_ext;
-            if (move_uploaded_file($_FILES['post_image']['tmp_name'], $upload_dir . $new_file_name)) {
-                $post_image_db = '/Sinergi/public/assets/uploads/' . $new_file_name;
+        $uploaded_paths = [];
+        
+        if (isset($_FILES['post_image'])) {
+            $files = $_FILES['post_image'];
+            
+            // Normalisasi $_FILES
+            $file_list = [];
+            if (is_array($files['name'])) {
+                $count = count($files['name']);
+                for ($i = 0; $i < $count; $i++) {
+                    if ($files['error'][$i] === UPLOAD_ERR_OK) {
+                        $file_list[] = [
+                            'name' => $files['name'][$i],
+                            'tmp_name' => $files['tmp_name'][$i],
+                            'error' => $files['error'][$i]
+                        ];
+                    }
+                }
+            } else {
+                if ($files['error'] === UPLOAD_ERR_OK) $file_list[] = $files;
             }
+
+            if (!empty($file_list)) {
+                $upload_dir = __DIR__ . '/../../public/assets/uploads/'; 
+                if (!file_exists($upload_dir)) mkdir($upload_dir, 0777, true);
+
+                foreach ($file_list as $file) {
+                    $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                    if (in_array($file_ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                        $new_file_name = time() . '_' . uniqid() . '.' . $file_ext;
+                        if (move_uploaded_file($file['tmp_name'], $upload_dir . $new_file_name)) {
+                            $uploaded_paths[] = '/Sinergi/public/assets/uploads/' . $new_file_name;
+                        }
+                    }
+                }
+                if (!empty($uploaded_paths)) $post_image_db = implode(',', $uploaded_paths);
+            }
+        }
+
+        if (empty($konten) && $post_image_db === null) {
+            $this->sendJson(['status' => 'error', 'message' => 'Konten atau Gambar harus diisi.']);
         }
 
         try {
@@ -170,21 +255,13 @@ class PostingController {
         else $this->sendJson(['status' => 'error', 'message' => 'Gagal simpan']);
     }
 
-    // --- FITUR YANG SEBELUMNYA KOSONG, SEKARANG DIAKTIFKAN ---
     public function deleteComment() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id'])) {
-            
             $comment_id = (int)$_POST['comment_id'];
             $user_id = (int)$_SESSION['user_id'];
-
-            // Panggil Model
             $success = $this->postModel->deleteComment($comment_id, $user_id);
-
-            if ($success) {
-                $this->sendJson(['status' => 'success']);
-            } else {
-                $this->sendJson(['status' => 'error', 'message' => 'Gagal menghapus atau bukan milik Anda']);
-            }
+            if ($success) $this->sendJson(['status' => 'success']);
+            else $this->sendJson(['status' => 'error', 'message' => 'Gagal menghapus atau bukan milik Anda']);
         } else {
             $this->sendJson(['status' => 'error', 'message' => 'Unauthorized'], 401);
         }
@@ -200,10 +277,15 @@ class PostingController {
             $result = $this->postModel->deletePost($post_id, $uid);
             if ($result['status']) {
                 if (!empty($result['image_path'])) {
+                    $paths = explode(',', $result['image_path']);
                     $target_dir = __DIR__ . '/../../public/assets/uploads/';
-                    $filename = basename($result['image_path']);
-                    $file_path = $target_dir . $filename;
-                    if (file_exists($file_path)) @unlink($file_path);
+                    foreach($paths as $p) {
+                        $p = trim($p);
+                        if(empty($p)) continue;
+                        $filename = basename($p);
+                        $file_path = $target_dir . $filename;
+                        if (file_exists($file_path)) @unlink($file_path);
+                    }
                 }
                 $this->sendJson(['status' => 'success', 'message' => 'Postingan dihapus']);
             } else {

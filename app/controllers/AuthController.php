@@ -48,6 +48,7 @@ class AuthController
         if (empty($captcha_input) || $captcha_session != $captcha_input) {
             $_SESSION['error_message'] = "Kode CAPTCHA salah!";
             $_SESSION['old_email'] = $email; 
+            $_SESSION['temp_pass'] = $password_input;
             header("Location: index.php?page=login");
             exit();
         }
@@ -140,25 +141,33 @@ class AuthController
         }
 
         // 4. VALIDASI ROLE & EMAIL KAMPUS
-        if ($role == '1') {
+        if ($role == '1') { // Mahasiswa
             if (!strpos($email, '@stu.pnj.ac.id')) {
                 $this->renderRegisterView("Gagal: Mahasiswa wajib menggunakan email @stu.pnj.ac.id", $input_data);
             }
             if (empty($nomor_induk)) {
                 $this->renderRegisterView("Gagal: Mahasiswa wajib mengisi NIM", $input_data);
             }
+            // TAMBAHAN: Validasi Hanya Angka
+            if (!ctype_digit($nomor_induk)) {
+                $this->renderRegisterView("Gagal: NIM harus berupa angka tanpa spasi/karakter lain", $input_data);
+            }
         } 
-        else if ($role == '2') {
-            if (!strpos($email, '@tik.pnj.ac.id')) {
-                $this->renderRegisterView("Gagal: Dosen wajib menggunakan email @tik.pnj.ac.id", $input_data);
+            else if ($role == '2') { // Dosen
+                if (!strpos($email, '@tik.pnj.ac.id')) {
+                    $this->renderRegisterView("Gagal: Dosen wajib menggunakan email @tik.pnj.ac.id", $input_data);
+                }
+                if (empty($nomor_induk)) {
+                    $this->renderRegisterView("Gagal: Dosen wajib mengisi NIP", $input_data);
+                }
+                // TAMBAHAN: Validasi Hanya Angka
+                if (!ctype_digit($nomor_induk)) {
+                    $this->renderRegisterView("Gagal: NIP harus berupa angka tanpa spasi/karakter lain", $input_data);
+                }
             }
-            if (empty($nomor_induk)) {
-                $this->renderRegisterView("Gagal: Dosen wajib mengisi NIP", $input_data);
+            else {
+                $nomor_induk = null; 
             }
-        }
-        else {
-            $nomor_induk = null; 
-        }
 
         // 5. PROSES KE DATABASE
         $password_hash = password_hash($password_input, PASSWORD_DEFAULT);
@@ -166,13 +175,13 @@ class AuthController
 
         // PERBAIKAN DISINI: Menyiapkan array data untuk UserModel Class
         $dataRegister = [
-            'username' => $username,
-            'nama'     => $nama_lengkap,
-            'email'    => $email,
-            'pass'     => $password_hash,
-            'role'     => $role,
-            'token'    => $token,
-            'nim'      => $nomor_induk
+            'username'    => $username,
+            'nama'        => $nama_lengkap,
+            'email'       => $email,
+            'pass'        => $password_hash,
+            'role'        => $role,
+            'token'       => $token,
+            'nomor_induk' => $nomor_induk 
         ];
 
         // Panggil method createUser dari object userModel
@@ -228,6 +237,148 @@ class AuthController
             header("Location: index.php?page=login");
         }
         exit();
+    }
+
+    public function showForgotPassword() {
+        $pesan = $_SESSION['pesan'] ?? '';
+        unset($_SESSION['pesan']);
+        require_once 'app/views/forgot_password.php';
+    }
+
+    public function doForgotPassword() {
+        $email = trim($_POST['email'] ?? '');
+        
+        if (empty($email)) {
+            $_SESSION['pesan'] = "Email wajib diisi!";
+            header("Location: index.php?page=forgot-password");
+            exit();
+        }
+
+        $user = $this->userModel->getUserByEmail($email);
+
+        if ($user) {
+            $token = bin2hex(random_bytes(32));
+
+            if ($this->userModel->setResetToken($email, $token)) {
+                $this->sendResetEmail($email, $user['nama_lengkap'], $token);
+                $_SESSION['pesan'] = "Link reset password telah dikirim ke email Anda.";
+            } else {
+                $_SESSION['pesan'] = "Gagal update database. Cek koneksi Oracle.";
+            }
+        } else {
+            $_SESSION['pesan'] = "Email tidak terdaftar.";
+        }
+        
+        header("Location: index.php?page=forgot-password");
+        exit();
+    }
+
+    private function sendResetEmail($email, $nama, $token) {
+        $resetLink = "http://localhost/sinergi/index.php?page=reset-password&code=" . $token;
+
+        $mail = new PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host       = 'smtp.gmail.com';
+            $mail->SMTPAuth   = true;
+            $mail->Username   = 'sinergi.tik24@gmail.com';
+            $mail->Password   = 'jzqzzlotalnaqqda';
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+            $mail->Port       = 465;
+
+            $mail->setFrom('sinergi.tik24@gmail.com', 'PBL SINERGI');
+            $mail->addAddress($email, $nama);
+            $mail->isHTML(true);
+            $mail->Subject = 'Reset Password Akun SINERGI';
+            $mail->Body    = "
+                <h3>Halo, $nama</h3>
+                <p>Klik tombol di bawah untuk reset password:</p>
+                <a href='$resetLink' style='background:#111827;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;'>Reset Password</a>
+                <br><br>
+            ";
+            $mail->send();
+        } catch (Exception $e) {
+            // Silent error
+        }
+    }
+
+    // =====================================
+    // FUNGSI RESET PASSWORD
+    // =====================================
+
+    public function showResetPassword() {
+        $token = $_GET['code'] ?? '';
+        $pesan = '';
+
+        if (empty($token)) {
+            $_SESSION['error_message'] = "Link reset password tidak valid. Token tidak ditemukan.";
+            header("Location: index.php?page=login");
+            exit();
+        }
+
+        $user = $this->userModel->getUserByToken($token);
+
+        if (!$user) {
+            $_SESSION['error_message'] = "Link reset password sudah tidak berlaku atau expired. Silakan request ulang.";
+            header("Location: index.php?page=forgot-password");
+            exit();
+        }
+
+        // Token valid - tampilkan form
+        require_once 'app/views/reset_password.php';
+    }
+
+    public function doResetPassword() {
+        $token = $_POST['token'] ?? '';
+        $password = $_POST['password'] ?? '';
+        $confirm = $_POST['confirm_password'] ?? '';
+
+        if (empty($token) || empty($password) || empty($confirm)) {
+            $pesan = "Semua field wajib diisi!";
+            require_once 'app/views/reset_password.php';
+            exit();
+        }
+
+        if ($password !== $confirm) {
+            $pesan = "Konfirmasi password tidak cocok!";
+            require_once 'app/views/reset_password.php';
+            exit();
+        }
+
+        if (strlen($password) < 8) {
+            $pesan = "Password minimal 8 karakter!";
+            require_once 'app/views/reset_password.php';
+            exit();
+        }
+        if (!preg_match('/[A-Z]/', $password)) {
+            $pesan = "Password harus mengandung minimal 1 huruf kapital!";
+            require_once 'app/views/reset_password.php';
+            exit();
+        }
+        if (!preg_match('/[0-9]/', $password)) {
+            $pesan = "Password harus mengandung minimal 1 angka!";
+            require_once 'app/views/reset_password.php';
+            exit();
+        }
+
+        $user = $this->userModel->getUserByToken($token);
+        if (!$user) {
+            $_SESSION['error_message'] = "Token expired atau tidak valid. Silakan request ulang.";
+            header("Location: index.php?page=forgot-password");
+            exit();
+        }
+
+        $newHash = password_hash($password, PASSWORD_DEFAULT);
+
+        if ($this->userModel->updateNewPassword($token, $newHash)) {
+            $_SESSION['error_message'] = "Password berhasil diubah! Silakan login dengan password baru.";
+            header("Location: index.php?page=login");
+            exit();
+        } else {
+            $pesan = "Gagal mengubah password. Coba lagi nanti.";
+            require_once 'app/views/reset_password.php';
+            exit();
+        }
     }
 }
 ?>

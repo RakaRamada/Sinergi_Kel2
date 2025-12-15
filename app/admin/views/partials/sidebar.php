@@ -7,9 +7,9 @@ $currentPage = $_GET['page'] ?? '';
     class="fixed top-0 left-0 h-full w-20 bg-white border-r border-gray-200 flex flex-col items-center py-6 space-y-6 z-40">
 
     <!-- Logo -->
-    <a href="/Sinergi/index.php?page=admin-dashboard" class="block p-1 hover:opacity-90 transition-opacity"
+    <a href="/sinergi/index.php?page=admin-dashboard" class="block p-1 hover:opacity-90 transition-opacity"
         title="Dashboard">
-        <img src="/Sinergi/public/assets/icons/logo.svg" alt="Logo" class="w-8 h-8">
+        <img src="/sinergi/public/assets/icons/logo.svg" alt="Logo" class="w-8 h-8">
     </a>
 
     <!-- Menu 1: Report Dashboard -->
@@ -37,21 +37,11 @@ $currentPage = $_GET['page'] ?? '';
     <div class="flex-1"></div>
 
     <!-- Profile -->
-    <<<<<<< HEAD <a href="/Sinergi/app/admin/views/profile.php" class="block p-1 hover:bg-gray-50 rounded"
-        title="Profil Admin">
-        <img src="/Sinergi/public/assets/icons/profile.svg" alt="Profil" class="w-9 h-9 rounded-full">
-        =======
-        <a href="/Sinergi/index.php?page=admin-profile" class="block p-1 hover:bg-gray-50 rounded" title="Profil Admin">
+    <div class="mt-auto"> <a href="/Sinergi/index.php?page=admin-profile"
+            class="block p-1 hover:bg-gray-50 rounded transition-colors" title="Profil Admin">
             <img src="<?= $_SESSION['avatar_url'] ?? '/Sinergi/public/assets/icons/profile.svg' ?>" alt="Profil"
-                class="w-9 h-9 rounded-full object-cover border">
-            >>>>>>> origin/raka
+                class="w-10 h-10 rounded-full object-cover border border-gray-200">
         </a>
+    </div>
 
 </aside>
-
-<<<<<<< HEAD <!-- spacer so main content won't be under the sidebar -->
-    <div class="w-20 flex-shrink-0"></div>
-    =======
-    <!-- Spacer agar konten utama tidak tertutup sidebar -->
-    <div class="w-20 flex-shrink-0 hidden lg:block"></div>
-    >>>>>>> origin/raka

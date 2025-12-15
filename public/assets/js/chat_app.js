@@ -78,8 +78,44 @@ window.cancelReply = function () {
 window.openDeleteModal = function (msgId) {
   window.messageIdToDelete = msgId;
   const modal = document.getElementById("deleteModal");
-  if (modal) modal.classList.remove("hidden");
+  const content = document.getElementById("deleteChatContent"); // ID Konten Dalam
+
+  if (modal && content) {
+    // 1. Hilangkan class hidden dulu
+    modal.classList.remove("hidden");
+
+    // 2. Force Browser Reflow (Trik biar animasi CSS jalan)
+    void modal.offsetWidth;
+
+    // 3. Masukkan class animasi (Muncul pelan + Membesar dikit)
+    modal.classList.remove("opacity-0");
+    modal.classList.add("opacity-100");
+
+    content.classList.remove("scale-95");
+    content.classList.add("scale-100");
+  }
+
   window.closeAllDropdowns();
+};
+
+window.closeDeleteModal = function () {
+  window.messageIdToDelete = null;
+  const modal = document.getElementById("deleteModal");
+  const content = document.getElementById("deleteChatContent");
+
+  if (modal && content) {
+    // 1. Animasi Keluar (Hilang pelan + Mengecil dikit)
+    modal.classList.remove("opacity-100");
+    modal.classList.add("opacity-0");
+
+    content.classList.remove("scale-100");
+    content.classList.add("scale-95");
+
+    // 2. Tambahkan class hidden setelah animasi selesai (200ms)
+    setTimeout(() => {
+      modal.classList.add("hidden");
+    }, 200);
+  }
 };
 
 // Tutup Modal Hapus
@@ -114,7 +150,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const sendBtn = document.getElementById("send-btn");
   const confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
 
-  let stagedFile = null;
+  let collectedFiles = [];
 
   // Auto Scroll Bawah saat load
   if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
@@ -129,55 +165,76 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  // --- EVENT LISTENER: FILE INPUT ---
   if (fileInput) {
     fileInput.addEventListener("change", (e) => {
       if (e.target.files && e.target.files.length > 0) {
-        stagedFile = e.target.files[0];
-        showFilePreviewUI(stagedFile);
+        const newFiles = Array.from(e.target.files);
+
+        // Validasi Max 5
+        if (collectedFiles.length + newFiles.length > 5) {
+          alert("Maksimal 5 gambar sekaligus!");
+          return;
+        }
+
+        collectedFiles = collectedFiles.concat(newFiles);
+        showFilePreviewUI(); // Update Tampilan
+        fileInput.value = ""; // Reset input biar bisa pilih file yang sama lagi
       }
     });
   }
 
-  function showFilePreviewUI(file) {
+  function showFilePreviewUI() {
     if (!filePreviewArea) return;
-    if (!file) {
+
+    // Reset tombol kirim state setiap kali preview berubah
+    updateSendButtonState();
+
+    if (collectedFiles.length === 0) {
       filePreviewArea.classList.add("hidden");
       filePreviewArea.innerHTML = "";
       return;
     }
+
     filePreviewArea.classList.remove("hidden");
-    const isImage = file.type.startsWith("image/");
-    const iconSrc = isImage
-      ? URL.createObjectURL(file)
-      : "/Sinergi/public/assets/icons/document.svg";
+    // Styling Container: Horizontal Scroll, Padding rapi
+    filePreviewArea.className =
+      "flex gap-3 overflow-x-auto p-3 bg-gray-50 border-t border-gray-200 w-full absolute bottom-full left-0 z-10 shadow-sm";
 
-    filePreviewArea.innerHTML = `
-            <div class="flex items-center p-2 bg-gray-100 rounded-lg border border-gray-300">
-                ${
-                  isImage
-                    ? `<img src="${iconSrc}" class="w-10 h-10 object-cover rounded mr-3">`
-                    : `<div class="p-2 bg-white rounded mr-3 border font-bold text-xs">DOC</div>`
-                }
-                <div class="flex-1 overflow-hidden">
-                    <p class="text-xs font-bold truncate">${escapeHTML(
-                      file.name
-                    )}</p>
-                    <p class="text-[10px] text-gray-500">${(
-                      file.size / 1024
-                    ).toFixed(1)} KB</p>
-                </div>
-                <button type="button" id="cancel-file-btn" class="ml-2 p-1 text-gray-400 hover:text-red-500">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+    let htmlContent = "";
+
+    collectedFiles.forEach((file, index) => {
+      const isImage = file.type.startsWith("image/");
+      const src = isImage
+        ? URL.createObjectURL(file)
+        : "/Sinergi/public/assets/icons/document.svg";
+
+      // Template Card per Item
+      htmlContent += `
+            <div class="relative flex-shrink-0 group w-20 h-20 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden animate-fade-in-up">
+                <img src="${src}" class="w-full h-full object-cover">
+                
+                <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition"></div>
+
+                <button onclick="removeFile(${index})" 
+                        class="absolute top-1 right-1 bg-white/80 hover:bg-red-500 hover:text-white text-gray-600 rounded-full p-0.5 shadow-sm transition transform scale-90 hover:scale-110">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
-            </div>`;
 
-    document.getElementById("cancel-file-btn").addEventListener("click", () => {
-      stagedFile = null;
-      if (fileInput) fileInput.value = null;
-      showFilePreviewUI(null);
+                <div class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[8px] px-1 py-0.5 text-center truncate">
+                    ${(file.size / 1024).toFixed(0)} KB
+                </div>
+            </div>
+        `;
     });
+
+    filePreviewArea.innerHTML = htmlContent;
   }
+
+  // Fungsi Global untuk Hapus File dari Array
+  window.removeFile = function (index) {
+    collectedFiles.splice(index, 1); // Hapus dari array
+    showFilePreviewUI(); // Render ulang
+  };
 
   // --- EVENT LISTENER: ENTER KEY ---
   if (messageInput) {
@@ -195,70 +252,106 @@ document.addEventListener("DOMContentLoaded", function () {
     chatForm.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      // Cegah Double Send
       if (sendBtn.disabled) return;
+
+      // UI Loading State
+      const originalIcon = sendBtn.innerHTML;
       sendBtn.disabled = true;
+      sendBtn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
 
       const isiPesan = messageInput ? messageInput.value.trim() : "";
       const hiddenInput = chatForm.querySelector('input[name="group_id"]');
       const targetId = hiddenInput ? hiddenInput.value : 0;
 
-      // Validasi: Jangan kirim kosong
-      if (isiPesan === "" && !stagedFile) {
-        sendBtn.disabled = false;
-        return;
-      }
-
       const formData = new FormData();
       formData.append("group_id", targetId);
       formData.append("isi_pesan", isiPesan);
 
-      if (stagedFile) {
-        formData.append("file_upload", stagedFile, stagedFile.name);
+      // Append File dari Array collectedFiles
+      if (collectedFiles.length > 0) {
+        collectedFiles.forEach((file) => {
+          formData.append("file_upload[]", file);
+        });
       }
 
-      // Masukkan data Reply jika ada
       if (window.replyingToMessage) {
         formData.append("reply_to_message_id", window.replyingToMessage.id);
       }
 
-      // RESET UI SEGERA (Optimistic UI)
+      // RESET UI OPTIMISTIC
       if (messageInput) messageInput.value = "";
-      showFilePreviewUI(null);
-      window.cancelReply(); // Reset reply state
-      stagedFile = null;
-      if (fileInput) fileInput.value = null;
+      collectedFiles = []; // Kosongkan array
+      showFilePreviewUI(); // Hilangkan preview
+      if (window.cancelReply) window.cancelReply();
 
       try {
-        // Kirim ke Backend
         await fetch("index.php?page=store-message", {
           method: "POST",
           body: formData,
         });
-        // Scroll ke bawah (data akan muncul via polling)
         if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
       } catch (error) {
         console.error(error);
-        alert("Gagal kirim pesan. Periksa koneksi.");
+        alert("Gagal kirim pesan.");
       } finally {
-        sendBtn.disabled = false;
+        // Balikin tombol kirim
+        sendBtn.innerHTML = originalIcon;
+        updateSendButtonState(); // Cek lagi statusnya
       }
     });
+  }
+
+  function updateSendButtonState() {
+    if (!sendBtn) return;
+
+    const hasText = messageInput && messageInput.value.trim().length > 0;
+    const hasFiles = collectedFiles.length > 0;
+
+    // Tombol aktif jika ada Teks ATAU ada File
+    if (hasText || hasFiles) {
+      sendBtn.disabled = false;
+      sendBtn.classList.remove("opacity-50", "cursor-not-allowed");
+      sendBtn.classList.add("hover:bg-gray-800"); // Efek hover aktif
+    } else {
+      sendBtn.disabled = true;
+      sendBtn.classList.add("opacity-50", "cursor-not-allowed");
+      sendBtn.classList.remove("hover:bg-gray-800");
+    }
+  }
+
+  if (messageInput) {
+    messageInput.addEventListener("input", updateSendButtonState);
   }
 
   // --- EVENT LISTENER: DELETE CONFIRM ---
   if (confirmDeleteBtn) {
     confirmDeleteBtn.addEventListener("click", function () {
       if (window.messageIdToDelete) {
+        confirmDeleteBtn.innerText = "...";
+        confirmDeleteBtn.disabled = true;
+
         fetch("index.php?page=delete-message", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message_id: window.messageIdToDelete }),
         })
-          .then((r) => r.json())
+          .then(async (r) => {
+            const text = await r.text(); // Baca response mentah
+            console.log("RESPONSE SERVER:", text); // <-- CEK CONSOLE BROWSER (F12)
+
+            try {
+              return JSON.parse(text);
+            } catch (err) {
+              console.error("JSON PARSE ERROR:", err);
+              // Tampilkan isi sampah yang bikin error di alert
+              throw new Error(
+                "Respon Server Rusak: " + text.substring(0, 50) + "..."
+              );
+            }
+          })
           .then((d) => {
-            if (d.success) {
-              // Hapus elemen dari layar
+            // Cek segala kemungkinan sukses
+            if (d.status === "success" || d.success === true) {
               const el = document.getElementById(
                 "message-" + window.messageIdToDelete
               );
@@ -270,14 +363,16 @@ document.addEventListener("DOMContentLoaded", function () {
             }
           })
           .catch((err) => {
-            console.error(err);
-            alert("Terjadi kesalahan koneksi.");
+            alert("Error: " + err.message);
             window.closeDeleteModal();
+          })
+          .finally(() => {
+            confirmDeleteBtn.innerText = "Hapus";
+            confirmDeleteBtn.disabled = false;
           });
       }
     });
   }
-
   // --- POLLING REALTIME ---
   function startPolling() {
     if (!chatBox) return;
@@ -304,6 +399,87 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
 
+  // --- FITUR GALLERY SLIDER / LIGHTBOX ---
+
+  // Variabel Global Gallery
+  let currentGalleryImages = [];
+  let currentGalleryIndex = 0;
+
+  window.openGallery = function (images, startIndex) {
+    const modal = document.getElementById("imageGalleryModal");
+    const imgEl = document.getElementById("galleryImage");
+    const prevBtn = document.getElementById("galleryPrevBtn");
+    const nextBtn = document.getElementById("galleryNextBtn");
+
+    // Simpan data
+    currentGalleryImages = images;
+    currentGalleryIndex = startIndex;
+
+    // Tampilkan Modal
+    modal.classList.remove("hidden");
+    void modal.offsetWidth; // Reflow
+    modal.classList.remove("opacity-0");
+
+    // Update Gambar
+    updateGalleryView();
+
+    // Listener Keyboard (Esc & Arrow)
+    document.addEventListener("keydown", galleryKeyHandler);
+  };
+
+  window.closeGallery = function () {
+    const modal = document.getElementById("imageGalleryModal");
+    modal.classList.add("opacity-0");
+    setTimeout(() => {
+      modal.classList.add("hidden");
+    }, 300);
+    // Hapus Listener Keyboard
+    document.removeEventListener("keydown", galleryKeyHandler);
+  };
+
+  window.navigateGallery = function (direction) {
+    // direction: -1 (kiri) atau 1 (kanan)
+    const newIndex = currentGalleryIndex + direction;
+
+    // Cek batas array
+    if (newIndex >= 0 && newIndex < currentGalleryImages.length) {
+      currentGalleryIndex = newIndex;
+      updateGalleryView();
+    }
+  };
+
+  function updateGalleryView() {
+    const imgEl = document.getElementById("galleryImage");
+    const counterEl = document.getElementById("galleryCounter");
+    const prevBtn = document.getElementById("galleryPrevBtn");
+    const nextBtn = document.getElementById("galleryNextBtn");
+
+    // Animasi Ganti Gambar (Fade Out-In dikit)
+    imgEl.style.opacity = "0.5";
+    setTimeout(() => {
+      imgEl.src = currentGalleryImages[currentGalleryIndex].trim();
+      imgEl.style.opacity = "1";
+    }, 150);
+
+    // Update Counter
+    counterEl.innerText = `${currentGalleryIndex + 1} / ${
+      currentGalleryImages.length
+    }`;
+
+    // Hide/Show Buttons kalau di ujung
+    if (currentGalleryIndex === 0) prevBtn.classList.add("hidden");
+    else prevBtn.classList.remove("hidden");
+
+    if (currentGalleryIndex === currentGalleryImages.length - 1)
+      nextBtn.classList.add("hidden");
+    else nextBtn.classList.remove("hidden");
+  }
+
+  function galleryKeyHandler(e) {
+    if (e.key === "Escape") window.closeGallery();
+    if (e.key === "ArrowLeft") window.navigateGallery(-1);
+    if (e.key === "ArrowRight") window.navigateGallery(1);
+  }
   // Mulai polling
   startPolling();
 });
