@@ -1,6 +1,6 @@
 <div class="flex flex-col h-[calc(100vh-64px)] bg-[#f0f2f5] relative overflow-hidden">
 
-    <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar" id="forumFeedContainer">
+    <div class="flex-1 overflow-y-auto p-4 pb-8 lg:pb-4 space-y-6 custom-scrollbar" id="forumFeedContainer">
 
         <?php 
         // --- PERBAIKAN: Sinkronisasi Variabel ---
@@ -110,10 +110,8 @@
         </div>
         <?php endif; ?>
     </div>
-
-
     <div
-        class="w-full bg-white border-t border-gray-200 px-3 py-3 z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] shrink-0 relative">
+        class="w-full bg-white border-t border-gray-200 px-3 py-3 z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] shrink-0 relative mb-16 lg:mb-0">
 
         <div id="imagePreviewArea"
             class="hidden absolute bottom-full left-4 mb-2 bg-white p-1.5 rounded-lg shadow-lg border border-gray-200">

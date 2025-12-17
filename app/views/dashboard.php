@@ -5,7 +5,7 @@ $user_avatar = $_SESSION['avatar_url'] ?? '/Sinergi/public/assets/images/default
 ?>
 
 
-<main class="col-span-6 border-r border-gray-200">
+<main class="col-span-1 lg:col-span-6 border-r border-gray-200 mb-16 lg:mb-0">
     <?php
     $current_view = $_GET['view'] ?? 'teman';
     ?>

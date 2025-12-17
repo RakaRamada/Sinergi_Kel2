@@ -20,12 +20,12 @@ $is_logged_in = isset($_SESSION['user_id']);
 $role_id = $_SESSION['role_id'] ?? 0; // 5 = Admin
 
 if (empty($page)) {
-    $page = $is_logged_in ? 'dashboard' : 'login';
+    $page = $is_logged_in ? 'dashboard' : 'landing';
 }
 
 // 3. WHITELISTS
 $public_pages = [
-    'login', 'login-process', 'register', 'register-process', 
+    'landing', 'login', 'login-process', 'register', 'register-process', 
     'verify', 'captcha', 'process-login', 'forgot-password', 
     'forgot-password-process', 
     'reset-password', 
@@ -33,8 +33,9 @@ $public_pages = [
 ];
 
 $admin_pages = [
-    'admin-dashboard', 'admin-detail-report', 'admin-profile', 'admin-analytics',
-    'admin-api-reports', 'admin-api-process', 'admin-api-chart-data'
+    'admin-dashboard', 'admin-detail-report', 'admin-profile', 'admin-analytics', 'admin-blacklist',
+    'admin-api-reports', 'admin-api-process', 'admin-api-chart-data', 'admin-api-banned-users',
+    'admin-api-unban-user', 'admin-api-delete-report', 'admin-api-purge-reports'
 ];
 
 $api_pages = [
@@ -103,6 +104,9 @@ $notifController = new NotificationController($conn);
 require_once 'app/controllers/SearchController.php';
 $searchController = new SearchController($conn);
 
+require_once 'app/controllers/LandingController.php';
+$landingController = new LandingController($conn);
+
 // Admin (Jika Perlu)
 if ($role_id == 5 || in_array($page, $admin_pages)) {
     if (file_exists('app/admin/controllers/adminController.php')) {
@@ -116,7 +120,6 @@ if ($role_id == 5 || in_array($page, $admin_pages)) {
 if (!in_array($page, $public_pages) && !in_array($page, $api_pages) && !in_array($page, $admin_pages)) {
     require_once 'app/views/partials/header.php';
 }
-
 // 7. ROUTING SWITCH
 switch ($page) {
 
@@ -127,6 +130,7 @@ switch ($page) {
     case 'register-process':$authController->doRegister(); break;
     case 'logout':          $authController->logout(); break;
     case 'verify':          $verifController->verifyEmail(); break;
+    case 'landing':         $landingController->index(); break;
 
     // --- POSTING & DASHBOARD ---
     case 'home':
@@ -216,6 +220,11 @@ switch ($page) {
     case 'admin-api-reports':   if(isset($adminController)) $adminController->apiGetReports(); break;
     case 'admin-api-process':   if(isset($adminController)) $adminController->apiProcessReport(); break;
     case 'admin-api-chart-data':if(isset($adminController)) $adminController->apiGetChartData(); break;
+    case 'admin-blacklist':     if(isset($adminController)) $adminController->blacklist(); break;
+    case 'admin-api-banned-users': if(isset($adminController)) $adminController->apiGetBannedUsers(); break;
+    case 'admin-api-unban-user':   if(isset($adminController)) $adminController->apiUnbanUser(); break;
+    case 'admin-api-delete-report':if(isset($adminController)) $adminController->apiDeleteReport(); break;
+    case 'admin-api-purge-reports':if(isset($adminController)) $adminController->apiPurgeReports(); break;
 
     // --- MISC ---
     case 'captcha':         
@@ -224,7 +233,7 @@ switch ($page) {
 
     // --- DEFAULT ---
     default:
-        header("Location: index.php?page=" . ($is_logged_in ? "dashboard" : "login"));
+        header("Location: index.php?page=" . ($is_logged_in ? "dashboard" : "landing"));
         exit();
 }
 

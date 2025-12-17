@@ -183,8 +183,7 @@ class MessageController {
         $startTime = time();
         
         while (time() - $startTime < 30) {
-            $newMessages = $this->messageModel->getNewMessagesAfterId($group_id, $last_message_id);
-
+            $newMessages = $this->messageModel->getNewMessagesAfterId($group_id, $last_message_id); 
             if (!empty($newMessages)) {
                 $this->sendJson($newMessages);
             }

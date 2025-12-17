@@ -99,7 +99,7 @@ if (isset($messages) && !empty($messages)) {
             }
         ?>
 
-        <div class="flex <?= $align_class ?> group/msg relative w-full mb-1" id="message-<?= $msg_id ?>">
+        <div class="flex <?= $align_class ?> group/msg relative w-full mb-4" id="message-<?= $msg_id ?>">
             <div class="relative max-w-[85%] sm:max-w-[65%] min-w-[100px]">
 
                 <button onclick="toggleMessageMenu(event, 'menu-<?= $msg_id ?>')"
@@ -302,13 +302,15 @@ if (isset($messages) && !empty($messages)) {
             </button>
         </form>
     </div>
+
+</div>
 </div>
 
 <div id="deleteModal"
     class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/50 backdrop-blur-sm transition-opacity opacity-0"
     aria-modal="true">
 
-    <div
+    <div id="deleteChatContent"
         class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform scale-95 transition-transform duration-200">
         <div class="text-center">
             <div class="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-red-100 mb-4">

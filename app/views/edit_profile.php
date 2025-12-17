@@ -1,4 +1,4 @@
-<main class="col-span-6 border-r border-gray-200 bg-white">
+<main class="col-span-10 lg:col-span-6 border-r border-gray-200 bg-white pb-20 lg:pb-0">
     <!-- HEADER BAR -->
     <div class="flex items-center space-x-4 p-4 border-b border-gray-200 sticky top-0 bg-white z-50">
         <a href="index.php?page=profile" title="Kembali" class="p-2 rounded-full hover:bg-gray-200">
@@ -8,7 +8,7 @@
     </div>
 
     <form action="index.php?page=update_profile" method="POST" enctype="multipart/form-data">
-        <div class="p-8 space-y-8 max-w-2xl mx-auto relative z-10">
+        <div class="p-4 sm:p-8 space-y-8 max-w-2xl mx-auto relative z-10">
 
             <!-- HEADER FOTO -->
             <div>
@@ -238,6 +238,8 @@
     </script>
 </main>
 
+<aside class="hidden lg:block">
 <?php 
 require 'app/views/partials/sidebar_kanan.php'; 
 ?>
+</aside>

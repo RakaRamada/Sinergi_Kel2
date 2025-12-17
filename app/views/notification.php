@@ -39,7 +39,7 @@ if (!function_exists('time_elapsed_string_notif')) {
 }
 ?>
 
-<main class="col-span-6 border-r border-gray-200 p-6 h-screen overflow-y-auto custom-scrollbar relative">
+<main class="col-span-1 lg:col-span-6 border-r border-gray-200 p-6 h-screen overflow-y-auto custom-scrollbar relative pb-20 lg:pb-0">
 
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold text-gray-800">Notifikasi</h1>

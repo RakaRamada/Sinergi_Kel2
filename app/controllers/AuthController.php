@@ -65,13 +65,29 @@ class AuthController
         $user_data = $this->userModel->getUserByEmail($email);
 
         if ($user_data && isset($user_data['password']) && password_verify($password_input, $user_data['password'])) {
+            // CEK BANNED: Gerbang keamanan - tolak user yang dibanned
+            if ((int)($user_data['is_banned'] ?? 0) === 1) {
+                $_SESSION['error_message'] = "Akun Anda telah dibekukan oleh Admin. Hubungi administrator untuk informasi lebih lanjut.";
+                $_SESSION['old_email'] = $email;
+                header("Location: index.php?page=login");
+                exit();
+            }
+            
             if ((int)$user_data['is_verif'] === 1) {
                 $_SESSION['user_id']      = $user_data['user_id'];
                 $_SESSION['nama_lengkap'] = $user_data['nama_lengkap'];
                 $_SESSION['username']     = $user_data['username'];
                 $_SESSION['role_name']    = $user_data['role_name'] ?? 'Mahasiswa';
                 $_SESSION['role_id']      = $user_data['role_id']; 
-                $_SESSION['avatar_url']   = !empty($user_data['avatar_url']) ? $user_data['avatar_url'] : '/Sinergi/public/assets/images/user.png';
+                // Normalize avatar_url to full path
+                $raw_avatar = $user_data['avatar_url'] ?? '';
+                if (empty($raw_avatar)) {
+                    $_SESSION['avatar_url'] = '/Sinergi/public/assets/images/user.png';
+                } elseif (strpos($raw_avatar, '/') !== false) {
+                    $_SESSION['avatar_url'] = $raw_avatar; // Already full path
+                } else {
+                    $_SESSION['avatar_url'] = '/Sinergi/public/uploads/avatars/' . $raw_avatar;
+                }
 
                 header("Location: index.php?page=" . ($user_data['role_id'] == 5 ? "admin-dashboard" : "dashboard"));
                 exit();

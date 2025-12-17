@@ -1,4 +1,4 @@
-<nav class="col-span-2 border-r border-gray-200 px-4 bg-white">
+<nav class="hidden lg:block lg:col-span-2 border-r border-gray-200 px-4 bg-white">
     <div class="flex flex-col items-end h-screen py-6 sticky top-0 z-50">
         <?php
         $currentPage = $_GET['page'] ?? 'dashboard';

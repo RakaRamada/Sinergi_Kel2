@@ -1,4 +1,4 @@
-<div class="col-span-10 h-[calc(100vh-3px)] bg-[#f0f2f5] overflow-y-auto custom-scrollbar relative">
+<div class="col-span-1 lg:col-span-10 h-[calc(100vh-3px)] bg-[#f0f2f5] overflow-y-auto custom-scrollbar relative pb-20 lg:pb-0">
 
     <div
         class="sticky top-0 z-30 bg-white/90 backdrop-blur-sm border-b border-gray-200 px-4 py-3 flex items-center gap-4 shadow-sm">

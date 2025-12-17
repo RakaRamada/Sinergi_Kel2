@@ -1,4 +1,4 @@
-<main class="col-span-6 border-r border-gray-200">
+<main class="col-span-10 lg:col-span-6 border-r border-gray-200 pb-20 lg:pb-0">
     <div
         class="flex items-center space-x-4 p-4 border-b border-gray-200 sticky top-0 bg-white/80 backdrop-blur-sm z-10">
         <a href="javascript:history.back()" title="Kembali" class="p-2 rounded-full hover:bg-gray-200">
@@ -76,6 +76,6 @@
     </div>
 </main>
 
-<aside class="col-span-4">
+<aside class="col-span-4 hidden lg:block">
     <?php require 'app/views/partials/sidebar_kanan.php'; ?>
 </aside>

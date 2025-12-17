@@ -13,7 +13,7 @@
         <h2 class="text-xl font-bold text-gray-900 tracking-tight">Pengaturan Grup</h2>
     </div>
 
-    <div class="max-w-2xl mx-auto px-6 py-10">
+    <div class="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-24 lg:pb-10">
 
         <form action="index.php?page=update-group" method="POST" enctype="multipart/form-data"
             class="space-y-8 bg-white p-8 rounded-2xl shadow-sm border border-gray-200">

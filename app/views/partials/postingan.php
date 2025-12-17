@@ -517,9 +517,18 @@ function submitReport(event, postId) {
         .then(data => {
             if (data.status === 'success' || data.status === true) {
                 closeReportModal();
-                showModernAlert('Berhasil', 'Laporan Anda telah kami terima.');
+                showModernAlert('Berhasil', 'Laporan Anda telah kami terima. Terima kasih!');
             } else {
-                showModernAlert('Gagal', data.message || 'Terjadi kesalahan');
+                // --- BAGIAN INI YANG KITA PERCANTIK ---
+
+                // Cek apakah errornya karena duplikat (kata kunci: "sudah")
+                if (data.message.toLowerCase().includes('sudah')) {
+                    // Judulnya jadi lebih santai
+                    showModernAlert('Sudah Dilaporkan', data.message);
+                } else {
+                    // Kalau error lain (misal database mati), baru tulis Gagal
+                    showModernAlert('Gagal', data.message || 'Terjadi kesalahan sistem');
+                }
             }
         })
         .catch(error => showModernAlert('Error', 'Terjadi kesalahan koneksi'))

@@ -13,7 +13,7 @@
 }
 </style>
 
-<aside class="col-span-4 p-6 pt-3 space-y-6 bg-transparent sticky top-20">
+<aside class="hidden lg:block lg:col-span-4 p-6 pt-3 space-y-6 bg-transparent sticky top-20">
 
     <div class="border border-gray-200 bg-white w-64 p-5 rounded-2xl shadow-sm">
         <h3 class="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2">
@@ -61,8 +61,13 @@
             <?php foreach ($recommendedGroups as $group): ?>
 
             <?php 
+                    // Cek role user untuk mengubah tampilan privacy
+                    $userRoleId = $_SESSION['role_id'] ?? 0;
+                    $isExternalRole = ($userRoleId >= 3); // Alumni (3), Mitra (4+)
+                    
                     // Logika Visual Private/Public
-                    $isPrivate = ($group['is_private'] == 1);
+                    // Jika user external, PAKSA tampilkan semua grup sebagai private
+                    $isPrivate = ($group['is_private'] == 1) || $isExternalRole;
                     $iconColor = $isPrivate ? 'text-gray-400' : 'text-gray-500';
                     $privacyText = $isPrivate ? 'Privat' : 'Publik';
                 ?>

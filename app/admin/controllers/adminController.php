@@ -19,22 +19,20 @@ class AdminController {
         $this->userModel = new UserModel($this->conn);
     }
 
-    // --- [BARU] FUNGSI HELPER PATH AVATAR ---
+    // --- HELPER FUNCTIONS ---
+    // (Pake punya kamu karena lebih robust)
     private function fixAvatarPath($url) {
-        // 1. Jika kosong, pakai default
         if (empty($url)) {
-            return '/Sinergi/public/assets/images/user.png'; 
+            return '/sinergi/public/assets/images/user.png'; 
         }
-        // 2. Jika sudah mengandung slash '/', berarti itu path lengkap (misal default dari DB)
         if (strpos($url, '/') !== false) {
             return $url;
         }
-        // 3. Jika cuma nama file, tambahkan prefix folder upload
-        return '/Sinergi/public/uploads/avatars/' . $url;
+        return '/sinergi/public/uploads/avatars/' . $url;
     }
 
     private function checkAdminAccess() {
-        if (!isset($_SESSION['user_id']) || $_SESSION['role_id'] != 5) {
+        if (!isset($_SESSION['user_id']) || ($_SESSION['role_id'] ?? 0) != 5) {
             $isApi = isset($_SERVER['HTTP_X_REQUESTED_WITH']) || (isset($_GET['page']) && strpos($_GET['page'], 'api') !== false);
             
             if ($isApi) {
@@ -43,16 +41,13 @@ class AdminController {
                 echo json_encode(['status' => 'error', 'message' => 'Unauthorized Access']);
                 exit;
             } else {
-                header('Location: /Sinergi/index.php?page=login');
+                header('Location: /sinergi/index.php?page=login');
                 exit;               
             }
         }
     }
 
-    // --- PAGES ---
-    
-    // ... dashboard & analytics tetap sama ...
-
+    // --- VIEW PAGES ---
     public function dashboard() {
         $this->checkAdminAccess();
         include __DIR__ . '/../views/dashboard.php';
@@ -65,26 +60,26 @@ class AdminController {
 
     public function detailReport() {
         $this->checkAdminAccess();
-        $reportId = $_GET['id'] ?? 0;
-        if ($reportId) {
-            $report = $this->reportModel->getReportById($reportId);
+        $id = $_GET['id'] ?? 0;
+        
+        if ($id) {
+            $report = $this->reportModel->getReportById($id);
             if (!$report) {
-                echo "<script>alert('Laporan tidak ditemukan'); window.location='/Sinergi/index.php?page=admin-dashboard';</script>";
+                echo "<script>alert('Laporan tidak ditemukan'); window.location='/sinergi/index.php?page=admin-dashboard';</script>";
                 exit;
             }
 
-            // --- [FIX] PERBAIKI PATH GAMBAR SEBELUM DIKIRIM KE VIEW ---
+            // Fix Path Gambar
             $report['REPORTER_AVATAR'] = $this->fixAvatarPath($report['REPORTER_AVATAR'] ?? '');
             $report['POST_OWNER_AVATAR'] = $this->fixAvatarPath($report['POST_OWNER_AVATAR'] ?? '');
             
-            // Fix juga gambar postingan jika cuma nama file (opsional, jaga-jaga)
             if (!empty($report['POST_IMAGE']) && strpos($report['POST_IMAGE'], '/') === false) {
-                 $report['POST_IMAGE'] = '/Sinergi/public/assets/uploads/' . $report['POST_IMAGE'];
+                 $report['POST_IMAGE'] = '/sinergi/public/assets/uploads/' . $report['POST_IMAGE'];
             }
 
             include __DIR__ . '/../views/detail_report.php';
         } else {
-            header('Location: /Sinergi/index.php?page=admin-dashboard');
+            header('Location: /sinergi/index.php?page=admin-dashboard');
             exit;
         }
     }
@@ -94,12 +89,10 @@ class AdminController {
         include __DIR__ . '/../views/profile.php';
     }
 
-    // --- API HANDLERS (JSON) ---
+    // --- API HANDLERS ---
 
-    // 1. API GET DATA LAPORAN (PAGINATION)
     public function apiGetReports() {
         $this->checkAdminAccess();
-        
         if (ob_get_length()) ob_clean(); 
         header('Content-Type: application/json');
 
@@ -107,27 +100,21 @@ class AdminController {
             $status = $_GET['status'] ?? null;
             if ($status === '') $status = null;
             
-            $page = isset($_GET['p']) ? (int)$_GET['p'] : 1;
-            if ($page < 1) $page = 1;
+            $page = max(1, (int)($_GET['p'] ?? 1));
             $limit = 10; 
 
-            $totalRecords = $this->reportModel->countAllReports($status);
-            $totalPages = ceil($totalRecords / $limit);
-
+            $total = $this->reportModel->countAllReports($status);
             $reports = $this->reportModel->getAllReports($status, $page, $limit);
             $stats = $this->reportModel->getReportStats();
 
-            $formatted = [];
+            $data = [];
             foreach ($reports as $r) {
-                // --- [FIX] GUNAKAN HELPER DI SINI ---
-                $avatar = $this->fixAvatarPath($r['REPORTER_AVATAR']);
-                
-                $formatted[] = [
+                $data[] = [
                     'REPORT_ID' => $r['REPORT_ID'],
                     'POST_ID' => $r['POST_ID'],
                     'REPORTER_NAMA' => $r['REPORTER_NAMA'] ?? 'User',
                     'REPORTER_USERNAME' => $r['REPORTER_USERNAME'] ?? 'unknown',
-                    'REPORTER_AVATAR_FIXED' => $avatar, // Ini yang dipakai frontend
+                    'REPORTER_AVATAR_FIXED' => $this->fixAvatarPath($r['REPORTER_AVATAR']),
                     'TANGGAL_FORMAT' => $r['CREATED_AT_STR'],
                     'STATUS' => $r['STATUS'],
                     'REASON' => $r['REASON'],
@@ -140,76 +127,110 @@ class AdminController {
             echo json_encode([
                 'status' => 'success', 
                 'stats' => $stats, 
-                'data' => $formatted,
+                'data' => $data, 
                 'pagination' => [
-                    'current_page' => $page,
-                    'total_pages' => $totalPages,
-                    'total_records' => $totalRecords,
-                    'limit' => $limit
+                    'current_page' => $page, 
+                    'total_pages' => ceil($total/$limit), 
+                    'total_records' => $total
                 ]
             ], JSON_UNESCAPED_SLASHES);
 
-        } catch (Exception $e) {
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        } catch (Exception $e) { 
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]); 
         }
         exit;
     }
 
-    // ... sisa method lain (apiGetChartData, apiProcessReport) biarkan tetap sama ...
+    public function apiProcessReport() {
+        $this->checkAdminAccess();
+        if (ob_get_length()) ob_clean(); 
+        header('Content-Type: application/json');
+
+        $aid = $_SESSION['user_id']; 
+        $act = $_POST['action'] ?? ''; 
+        $rid = $_POST['report_id'] ?? 0;
+        
+        try {
+            $res = ['status' => false, 'message' => 'Invalid Request'];
+
+            if ($act == 'delete_post') {
+                // ReportModel->deleteReportedPost() already handles:
+                // 1. Deleting post + comments + likes + notifications
+                // 2. Auto-marking report as 'resolved' (Step 5)
+                $res = $this->reportModel->deleteReportedPost($rid, $aid);
+            } 
+            elseif ($act == 'ban_user') {
+                $uid = $_POST['user_id'] ?? 0;
+                // Menggunakan function banUser yang sudah diupdate (Butuh 3 parameter: uid, report_id, admin_id)
+                $res = $this->reportModel->banUser($uid, $rid, $aid);
+            } 
+            elseif (in_array($act, ['mark_resolved', 'mark_rejected'])) {
+                $st = ($act == 'mark_resolved') ? 'resolved' : 'rejected';
+                $res = $this->reportModel->updateReportStatus($rid, $aid, $st, 'Updated by Admin');
+            }
+
+            echo json_encode($res);
+
+        } catch (Exception $e) { 
+            echo json_encode(['status' => false, 'message' => $e->getMessage()]); 
+        }
+        exit;
+    }
+
+    // API ANALYTICS (Pake Logika Teman yang support parameter Year)
     public function apiGetChartData() {
         $this->checkAdminAccess();
-        
         if (ob_get_length()) ob_clean();
         header('Content-Type: application/json');
 
         $filter = $_GET['filter'] ?? 'user'; 
+        $year   = $_GET['year'] ?? date('Y'); // Ambil tahun, default sekarang
 
         try {
             $label = '';
             $raw = [];
 
-            // 1. Ambil Data Mentah dari DB
             if ($filter === 'user') {
-                $raw = $this->reportModel->getUserGrowthAnalytics();
-                $label = 'Pertumbuhan User Baru';
+                $raw = $this->reportModel->getUserGrowthAnalytics($year);
+                $label = "User Baru ($year)";
             } elseif ($filter === 'post') {
-                $raw = $this->reportModel->getPostGrowthAnalytics();
-                $label = 'Jumlah Postingan Baru';
+                $raw = $this->reportModel->getPostGrowthAnalytics($year);
+                $label = "Postingan ($year)";
             } elseif ($filter === 'community') { 
-                $raw = $this->reportModel->getGroupGrowthAnalytics();
-                $label = 'Pertumbuhan Group Baru';
+                $raw = $this->reportModel->getGroupGrowthAnalytics($year);
+                $label = "Group Baru ($year)";
+            } elseif ($filter === 'reports') { 
+                $raw = $this->reportModel->getReportGrowthAnalytics($year);
+                $label = "Laporan Masuk ($year)";
             }
 
-            // 2. LOGIKA "ZERO-FILL": Isi bulan kosong dengan 0
-            // Kita buat array 12 bulan terakhir secara manual
+            // Logic: Loop Bulan 1 sampai 12 (Jan - Des)
+            // Agar grafik selalu rapi dari kiri ke kanan (Januari -> Desember)
             $finalData = [];
             $finalLabels = [];
             
-            // Loop 11 bulan lalu sampai bulan ini
-            for ($i = 11; $i >= 0; $i--) {
-                $monthKey = date('Y-m', strtotime("-$i months")); // Contoh: "2024-12"
-                $monthLabel = date('M Y', strtotime("-$i months")); // Contoh: "Dec 2024"
+            for ($m = 1; $m <= 12; $m++) {
+                $monthNum = str_pad($m, 2, '0', STR_PAD_LEFT); // '01', '02'...
+                $monthName = date('M', mktime(0, 0, 0, $m, 10)); // Jan, Feb...
                 
-                // Cari apakah bulan ini ada di data DB ($raw)
-                $found = false;
                 $value = 0;
-                
-                foreach($raw as $r) {
-                    if($r['BULAN'] == $monthKey) {
+                foreach ($raw as $r) {
+                    // Mencocokkan dengan alias di query Model (BULAN_ANGKA)
+                    if (isset($r['BULAN_ANGKA']) && $r['BULAN_ANGKA'] == $monthNum) {
                         $value = (int)$r['TOTAL'];
                         break;
                     }
                 }
                 
-                $finalLabels[] = $monthLabel;
+                $finalLabels[] = $monthName;
                 $finalData[] = $value;
             }
 
             echo json_encode([
                 'status' => 'success',
                 'label' => $label,
-                'labels' => $finalLabels, // Kirim label yang sudah urut & lengkap
-                'data' => $finalData      // Kirim data yang ada angka 0-nya
+                'labels' => $finalLabels,
+                'data' => $finalData
             ]);
 
         } catch (Exception $e) {
@@ -218,32 +239,84 @@ class AdminController {
         exit;
     }
 
-    // 3. API PROCESS ACTION (Delete, Ban, Status)
-    public function apiProcessReport() {
+    // --- BLACKLIST PAGE ---
+    public function blacklist() {
+        $this->checkAdminAccess();
+        include __DIR__ . '/../views/blacklist.php';
+    }
+
+    // --- API: Get Banned Users ---
+    public function apiGetBannedUsers() {
         $this->checkAdminAccess();
         if (ob_get_length()) ob_clean();
         header('Content-Type: application/json');
 
-        $admin_id = $_SESSION['user_id']; 
-        $action = $_POST['action'] ?? '';
-        $report_id = $_POST['report_id'] ?? 0;
-        $response = ['status' => false, 'message' => 'Invalid Request'];
-
         try {
-            if ($action === 'delete_post') {
-                $response = $this->reportModel->deleteReportedPost($report_id, $admin_id);
-            } elseif ($action === 'ban_user') {
-                $uid = $_POST['user_id'] ?? 0;
-                if ($uid) $response = $this->reportModel->banUser($uid, $admin_id);
-            } elseif ($action === 'mark_resolved' || $action === 'mark_rejected') {
-                $status = ($action === 'mark_resolved') ? 'resolved' : 'rejected';
-                $response = $this->reportModel->updateReportStatus($report_id, $admin_id, $status, 'Updated by Admin');
+            $users = $this->reportModel->getBannedUsers();
+            
+            $data = [];
+            foreach ($users as $u) {
+                $data[] = [
+                    'USER_ID' => $u['USER_ID'],
+                    'USERNAME' => $u['USERNAME'],
+                    'NAMA_LENGKAP' => $u['NAMA_LENGKAP'],
+                    'EMAIL' => $u['EMAIL'],
+                    'AVATAR_URL' => $this->fixAvatarPath($u['AVATAR_URL']),
+                    'JOINED_DATE' => $u['JOINED_DATE']
+                ];
             }
+
+            echo json_encode(['status' => 'success', 'data' => $data, 'total' => count($data)]);
         } catch (Exception $e) {
-            $response = ['status' => false, 'message' => $e->getMessage()];
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // --- API: Unban User ---
+    public function apiUnbanUser() {
+        $this->checkAdminAccess();
+        if (ob_get_length()) ob_clean();
+        header('Content-Type: application/json');
+
+        $userId = $_POST['user_id'] ?? 0;
+        
+        if (!$userId) {
+            echo json_encode(['status' => false, 'message' => 'User ID tidak valid']);
+            exit;
         }
 
-        echo json_encode($response);
+        $result = $this->reportModel->unbanUser($userId);
+        echo json_encode($result);
+        exit;
+    }
+
+    // --- API: Delete Single Resolved Report ---
+    public function apiDeleteReport() {
+        $this->checkAdminAccess();
+        if (ob_get_length()) ob_clean();
+        header('Content-Type: application/json');
+
+        $reportId = $_POST['report_id'] ?? 0;
+        
+        if (!$reportId) {
+            echo json_encode(['status' => false, 'message' => 'Report ID tidak valid']);
+            exit;
+        }
+
+        $result = $this->reportModel->deleteResolvedReport($reportId);
+        echo json_encode($result);
+        exit;
+    }
+
+    // --- API: Delete All Resolved Reports ---
+    public function apiPurgeReports() {
+        $this->checkAdminAccess();
+        if (ob_get_length()) ob_clean();
+        header('Content-Type: application/json');
+
+        $result = $this->reportModel->deleteAllResolvedReports();
+        echo json_encode($result);
         exit;
     }
 }

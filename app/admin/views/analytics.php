@@ -1,32 +1,138 @@
 <?php
 include __DIR__ . '/partials/header.php';
 include __DIR__ . '/partials/sidebar.php';
+include __DIR__ . '/partials/bottom_nav.php';
+
+// Logic PHP Sederhana untuk Dropdown Tahun
+// Mulai dari 2025 sampai tahun sekarang
+$startYear = 2025;
+$currentYear = date('Y');
 ?>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<main class="flex-1 p-6 ml-0 lg:ml-20 bg-gray-50 min-h-screen flex flex-col">
+<style>
+/* CSS HACK: Memaksa panah bawaan browser hilang total */
+.clean-select {
+    -webkit-appearance: none;
+    /* Chrome, Safari, Edge */
+    -moz-appearance: none;
+    /* Firefox */
+    appearance: none;
+    background-image: none;
+    background-color: transparent;
+}
 
-    <div class="w-full flex-1 bg-white rounded-[20px] shadow-sm p-8 relative flex flex-col">
+/* Khusus untuk Internet Explorer / Edge lama */
+.clean-select::-ms-expand {
+    display: none;
+}
 
-        <div class="flex flex-col md:flex-row justify-between items-center mb-6 shrink-0">
+/* Animasi Dropdown Muncul */
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.animate-fade-in-down {
+    animation: fadeInDown 0.2s ease-out forwards;
+}
+
+/* Scrollbar Gelap Keren */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #1A1A1A;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+</style>
+
+<main class="flex-1 p-4 sm:p-6 ml-0 lg:ml-20 bg-gray-50 min-h-screen flex flex-col pb-24 lg:pb-6 overflow-x-hidden">
+
+    <div class="w-full flex-1 bg-white rounded-[20px] shadow-sm p-4 sm:p-8 relative flex flex-col">
+
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 shrink-0 gap-4">
             <h1 class="text-2xl font-bold text-gray-900 tracking-tight self-start md:self-center">
-                Visualisasi Data Laporan
+                Tren Pertumbuhan
             </h1>
 
-            <div class="relative mt-4 md:mt-0 w-full md:w-auto z-20">
-                <select id="dataFilter" onchange="updateChart()"
-                    class="appearance-none bg-[#1A1A1A] text-white pl-6 pr-12 py-2.5 rounded-full text-sm font-medium cursor-pointer focus:outline-none hover:bg-black transition-colors shadow-md w-full md:w-48">
-                    <option value="user">User</option>
-                    <option value="post">Postingan</option>
-                    <option value="community">Groups</option>
-                </select>
+            <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto z-30">
 
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-white">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
+                <div class="relative w-full md:w-48 group">
+                    <input type="hidden" id="dataFilter" value="user">
+
+                    <button onclick="toggleDropdown('dropdown-data')" id="btn-data-label"
+                        class="w-full bg-[#1A1A1A] text-white pl-5 pr-4 py-2.5 rounded-full text-sm font-medium border border-gray-700 hover:border-gray-500 hover:bg-black transition-all shadow-md flex justify-between items-center cursor-pointer">
+                        <span>User Baru</span> <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
+                            id="arrow-data" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+
+                    <div id="dropdown-data"
+                        class="hidden absolute top-full mt-2 w-full bg-[#1A1A1A] border border-gray-800 rounded-2xl shadow-xl overflow-hidden z-40 transform origin-top animate-fade-in-down">
+                        <div class="py-1">
+                            <div onclick="selectOption('data', 'user', 'User Baru')"
+                                class="px-5 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white cursor-pointer transition-colors flex items-center gap-2">
+                                User Baru
+                            </div>
+                            <div onclick="selectOption('data', 'post', 'Postingan')"
+                                class="px-5 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white cursor-pointer transition-colors flex items-center gap-2">
+                                Postingan
+                            </div>
+                            <div onclick="selectOption('data', 'community', 'Groups')"
+                                class="px-5 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white cursor-pointer transition-colors flex items-center gap-2">
+                                Groups
+                            </div>
+                            <div onclick="selectOption('data', 'reports', 'Laporan Masuk')"
+                                class="px-5 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white cursor-pointer transition-colors flex items-center gap-2">
+                                Laporan Masuk
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <div class="relative w-full md:w-32 group">
+                    <input type="hidden" id="yearFilter" value="<?= $currentYear ?>">
+
+                    <button onclick="toggleDropdown('dropdown-year')" id="btn-year-label"
+                        class="w-full bg-[#1A1A1A] text-white pl-5 pr-4 py-2.5 rounded-full text-sm font-medium border border-gray-700 hover:border-gray-500 hover:bg-black transition-all shadow-md flex justify-between items-center cursor-pointer">
+                        <span><?= $currentYear ?></span>
+                        <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="arrow-year" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+
+                    <div id="dropdown-year"
+                        class="hidden absolute top-full mt-2 w-full bg-[#1A1A1A] border border-gray-800 rounded-2xl shadow-xl overflow-hidden z-40 transform origin-top animate-fade-in-down max-h-60 overflow-y-auto custom-scrollbar">
+                        <div class="py-1">
+                            <?php 
+                for ($y = $startYear; $y <= $currentYear; $y++) {
+                    echo "<div onclick=\"selectOption('year', '$y', '$y')\" class=\"px-5 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white cursor-pointer transition-colors\">$y</div>";
+                }
+                ?>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
 
@@ -51,13 +157,13 @@ let myChart = null;
 // --- FUNGSI UPDATE CHART ---
 async function updateChart() {
     const filter = document.getElementById('dataFilter').value;
+    const year = document.getElementById('yearFilter').value; // Ambil tahun
     const loading = document.getElementById('chartLoading');
 
     loading.classList.remove('hidden');
-
     try {
-        // Panggil API
-        const url = `/Sinergi/index.php?page=admin-api-chart-data&filter=${filter}`;
+        // Panggil API dengan parameter filter & year
+        const url = `/sinergi/index.php?page=admin-api-chart-data&filter=${filter}&year=${year}`;
         const response = await fetch(url);
         const result = await response.json();
 
@@ -81,7 +187,6 @@ function renderChart(labels, dataPoints, datasetLabel) {
         myChart.destroy();
     }
 
-    // Gradient Fill (Lebih tinggi karena chart lebih besar)
     const gradient = ctx.createLinearGradient(0, 0, 0, 800);
     gradient.addColorStop(0, 'rgba(0, 0, 0, 0.2)');
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
@@ -102,12 +207,12 @@ function renderChart(labels, dataPoints, datasetLabel) {
                 pointRadius: 4,
                 pointHoverRadius: 6,
                 fill: true,
-                tension: 0.4 // Garis lurus
+                tension: 0.4
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false, // PENTING: Agar chart mengikuti ukuran container flex
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     display: false
@@ -163,11 +268,60 @@ function renderChart(labels, dataPoints, datasetLabel) {
             },
             interaction: {
                 intersect: false,
-                mode: 'index',
+                mode: 'index'
             },
         }
     });
 }
+
+function toggleDropdown(id) {
+    // Tutup dropdown lain dulu biar gak numpuk
+    const allDropdowns = ['dropdown-data', 'dropdown-year'];
+    allDropdowns.forEach(d => {
+        if (d !== id) document.getElementById(d).classList.add('hidden');
+    });
+
+    const el = document.getElementById(id);
+    const arrow = document.getElementById(id === 'dropdown-data' ? 'arrow-data' : 'arrow-year');
+
+    el.classList.toggle('hidden');
+
+    // Putar panah kalau aktif
+    if (!el.classList.contains('hidden')) {
+        arrow.style.transform = 'rotate(180deg)';
+    } else {
+        arrow.style.transform = 'rotate(0deg)';
+    }
+}
+
+// Logika Saat Opsi Dipilih
+function selectOption(type, value, label) {
+    // 1. Update Input Hidden (agar Chart API bisa baca)
+    const inputId = type === 'data' ? 'dataFilter' : 'yearFilter';
+    document.getElementById(inputId).value = value;
+
+    // 2. Update Label Tombol
+    const btnLabelId = type === 'data' ? 'btn-data-label' : 'btn-year-label';
+    document.querySelector(`#${btnLabelId} span`).innerText = label;
+
+    // 3. Tutup Dropdown
+    toggleDropdown(type === 'data' ? 'dropdown-data' : 'dropdown-year');
+
+    // 4. Panggil Update Chart (Fungsi Chart Kamu)
+    if (typeof updateChart === "function") {
+        updateChart();
+    }
+}
+
+// Tutup dropdown kalau klik di luar area
+window.addEventListener('click', function(e) {
+    if (!e.target.closest('.group')) {
+        document.getElementById('dropdown-data').classList.add('hidden');
+        document.getElementById('dropdown-year').classList.add('hidden');
+        document.getElementById('arrow-data').style.transform = 'rotate(0deg)';
+        document.getElementById('arrow-year').style.transform = 'rotate(0deg)';
+    }
+});
 
 document.addEventListener('DOMContentLoaded', updateChart);
 </script>

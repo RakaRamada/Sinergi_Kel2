@@ -240,7 +240,7 @@
             </div>
         </div>
 
-        <div class="w-full bg-white border-t border-gray-200 px-4 p-2 z-40 shrink-0">
+        <div class="w-full bg-white border-t border-gray-200 px-4 p-2 z-40 shrink-0 mb-14 lg:mb-0">
             <div id="reply-preview"
                 class="hidden flex items-center justify-between bg-blue-50 p-2 mb-2 rounded-lg border-l-4 border-blue-500 text-xs shadow-sm mx-auto max-w-3xl">
                 <div class="overflow-hidden">
@@ -258,7 +258,7 @@
             </div>
 
             <form onsubmit="submitDetailComment(event, <?= $post['post_id'] ?>)"
-                class="flex gap-3 items-end max-w-3xl mx-auto">
+                class="flex gap-3 items-center max-w-3xl mx-auto">
                 <input type="hidden" name="parent_id" id="parent_id_input" value="">
                 <?php 
                     // FIX LOGIKA AVATAR (Mencegah Double Path)
@@ -348,11 +348,46 @@ function submitDetailComment(e, postId) {
         });
 }
 
+let commentIdToDelete = null;
+
 function deleteComment(commentId) {
-    if (!confirm("Hapus komentar ini?")) return;
+    commentIdToDelete = commentId;
+    const modal = document.getElementById('deleteCommentModal');
+    const content = document.getElementById('deleteCommentContent');
+    
+    if (modal && content) {
+        modal.classList.remove('hidden');
+        void modal.offsetWidth;
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        modal.classList.add('opacity-100');
+        content.classList.remove('scale-95');
+        content.classList.add('scale-100');
+    }
+}
+
+function closeDeleteCommentModal() {
+    commentIdToDelete = null;
+    const modal = document.getElementById('deleteCommentModal');
+    const content = document.getElementById('deleteCommentContent');
+    
+    if (modal && content) {
+        modal.classList.remove('opacity-100');
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        content.classList.remove('scale-100');
+        content.classList.add('scale-95');
+        setTimeout(() => { modal.classList.add('hidden'); }, 200);
+    }
+}
+
+function confirmDeleteComment() {
+    if (!commentIdToDelete) return;
+    
+    const btn = document.getElementById('confirmDeleteCommentBtn');
+    btn.innerHTML = '<svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+    btn.disabled = true;
 
     const fd = new FormData();
-    fd.append('comment_id', commentId);
+    fd.append('comment_id', commentIdToDelete);
 
     fetch('index.php?page=api-delete-forum-comment', {
             method: 'POST',
@@ -361,46 +396,40 @@ function deleteComment(commentId) {
         .then(r => r.json())
         .then(data => {
             if (data.status === 'success') {
-                const row = document.getElementById('comment-row-' + commentId);
+                const row = document.getElementById('comment-row-' + commentIdToDelete);
 
                 if (row) {
-                    // Cek apakah ini adalah 'anak' (reply)?
-                    // Wadah anak ID-nya formatnya: 'replies-PARENT_ID'
                     const parentContainer = row.parentElement;
                     const isReply = parentContainer && parentContainer.id.startsWith('replies-');
-
-                    // 1. Hapus elemen dari layar
                     row.remove();
 
-                    // 2. Logika Update Tombol 'Lihat Balasan'
                     if (isReply) {
                         const parentId = parentContainer.id.replace('replies-', '');
-                        // Cari tombol toggle milik bapaknya
                         const toggleBtn = document.querySelector(
                             `button[onclick="toggleReplies('replies-${parentId}')"]`);
 
                         if (toggleBtn) {
-                            // Hitung sisa anak yang ada di dalam container
                             const remaining = parentContainer.children.length;
-
                             if (remaining === 0) {
-                                // Jika habis, hilangkan Container Pembungkus Tombolnya (div.pl-16)
                                 toggleBtn.parentElement.remove();
-                                // Hilangkan container replies juga biar bersih
                                 parentContainer.remove();
                             } else {
-                                // Jika masih ada, update teks angkanya
                                 const spanText = toggleBtn.querySelector('span');
                                 if (spanText) spanText.innerText = `Lihat ${remaining} balasan`;
                             }
                         }
                     }
                 }
+                closeDeleteCommentModal();
             } else {
                 alert('Gagal menghapus');
+                closeDeleteCommentModal();
             }
         })
-        .catch(err => console.error(err));
+        .catch(err => {
+            console.error(err);
+            closeDeleteCommentModal();
+        });
 }
 
 function toggleLike(btn, postId) {
@@ -486,3 +515,35 @@ document.addEventListener("DOMContentLoaded", function() {
     if (feed) feed.scrollTop = feed.scrollHeight;
 });
 </script>
+
+<!-- Delete Comment Modal -->
+<div id="deleteCommentModal"
+    class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/50 backdrop-blur-sm transition-opacity opacity-0 pointer-events-none"
+    aria-modal="true">
+
+    <div id="deleteCommentContent"
+        class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform scale-95 transition-transform duration-200">
+        <div class="text-center">
+            <div class="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-red-100 mb-4">
+                <svg class="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            </div>
+            <h3 class="text-lg leading-6 font-bold text-gray-900">Hapus Komentar?</h3>
+            <p class="text-sm text-gray-500 mt-2">
+                Komentar ini akan dihapus secara permanen.
+            </p>
+        </div>
+        <div class="mt-6 flex gap-3">
+            <button type="button" onclick="closeDeleteCommentModal()"
+                class="w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-4 py-2.5 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+                Batal
+            </button>
+            <button type="button" id="confirmDeleteCommentBtn" onclick="confirmDeleteComment()"
+                class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2.5 bg-red-600 text-base font-medium text-white hover:bg-red-700 transition cursor-pointer shadow-red-200">
+                Hapus
+            </button>
+        </div>
+    </div>
+</div>

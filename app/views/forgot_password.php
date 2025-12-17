@@ -41,7 +41,7 @@ $pesan = $pesan ?? '';
                     </div>
 
                     <button type="submit"
-                        class="w-full bg-gray-900 text-white font-bold rounded-lg py-3 mt-4 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900">
+                        class="w-full bg-gray-900 text-white font-bold rounded-lg py-3 mt-4 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 cursor-pointer">
                         Kirim Link Reset
                     </button>
                 </form>

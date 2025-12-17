@@ -79,6 +79,28 @@ class ProfileController {
         if (!isset($_SESSION['user_id'])) { header('Location: index.php?page=login'); exit; }
         $current_user_id = (int)$_SESSION['user_id'];
 
+        // --- SIDEBAR DATA (Supaya Sidebar Kanan Tetap Muncul) ---
+        require_once __DIR__ . '/../models/UserModel.php';
+        require_once __DIR__ . '/../models/GroupModel.php';
+        
+        $uModel = new UserModel($this->conn);
+        $gModel = new GroupModel($this->conn);
+
+        $recommendedUsers = $uModel->getTopActiveUsers(5, $current_user_id);
+        foreach ($recommendedUsers as &$u) {
+            $u['avatar_url'] = $this->fixUrl($u['avatar_url'], 'user.png');
+        }
+        unset($u);
+
+        $recommendedGroups = $gModel->getPopularGroups(5);
+        foreach ($recommendedGroups as &$g) {
+            $g['group_image'] = !empty($g['group_image']) 
+                 ? '/Sinergi/public/uploads/group_profiles/' . $g['group_image'] 
+                 : '/Sinergi/public/assets/images/user.png';
+        }
+        unset($g);
+        // --- END SIDEBAR DATA ---
+
         $sql = "SELECT * FROM users WHERE user_id = :p_curr_id";
         $stmt = oci_parse($this->conn, $sql);
         oci_bind_by_name($stmt, ':p_curr_id', $current_user_id);

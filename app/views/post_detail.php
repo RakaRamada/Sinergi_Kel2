@@ -11,7 +11,7 @@
     }
 ?>
 
-<main class="col-span-6 border-r border-gray-200 min-h-screen pb-20 bg-white">
+<main class="col-span-1 lg:col-span-6 border-r border-gray-200 min-h-screen pb-20 lg:pb-0 bg-white">
     <div
         class="flex items-center space-x-4 p-4 border-b border-gray-200 sticky top-0 bg-white/95 backdrop-blur-sm z-20">
         <button onclick="history.back()"

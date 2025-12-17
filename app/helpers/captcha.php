@@ -21,7 +21,7 @@ $code = acakCaptcha();
 $_SESSION["code"] = $code; // Sekarang ini aman karena session sudah dimulai
 
 $wh = imagecreatetruecolor(173, 50);
-$bgc = imagecolorallocate($wh, 22, 86, 165); // Background biru
+$bgc = imagecolorallocate($wh, 0, 0, 0); // Background biru
 $fc = imagecolorallocate($wh, 223, 230, 233); // Text color abu-abu
 imagefill($wh, 0, 0, $bgc);
 imagestring($wh, 10, 50, 15, $code, $fc);
