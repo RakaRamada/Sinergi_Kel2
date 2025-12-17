@@ -513,7 +513,10 @@ class GroupController {
         $can_manage = $this->canManageGroup($user_id, $group_id);
         $pending_members = [];
         
-        if ($can_manage && $group_info['is_private']) {
+        // PERBAIKAN: Ambil pending members untuk SEMUA grup (publik/privat)
+        // Karena user eksternal (Alumni/Mitra) bisa request join ke grup publik
+        // yang bagi mereka diperlakukan sebagai private
+        if ($can_manage) {
             $pending_members = $this->groupModel->getPendingMembers($group_id);
         }
         

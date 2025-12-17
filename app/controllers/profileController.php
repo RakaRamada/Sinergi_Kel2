@@ -72,6 +72,24 @@ class ProfileController {
         $profile_data['HEADER_URL_FIXED'] = $this->fixUrl($profile_data['HEADER_URL'], 'default-header.jpg');
         
         $user_posts = $this->postModel->getPostsByUserId($profile_user_id, $current_user_id);
+        
+        // Format waktu posting (sama dengan PostingController.getPostings)
+        date_default_timezone_set('Asia/Jakarta');
+        $now = time();
+        foreach ($user_posts as &$post) {
+            $timestamp = strtotime($post['CREATED_AT_STR'] ?? '');
+            if ($timestamp) {
+                $diff = $now - $timestamp;
+                if ($diff < 60) $post['WAKTU_POSTING'] = 'Baru saja';
+                else if ($diff < 3600) $post['WAKTU_POSTING'] = floor($diff / 60) . ' menit yang lalu';
+                else if ($diff < 86400) $post['WAKTU_POSTING'] = floor($diff / 3600) . ' jam yang lalu';
+                else $post['WAKTU_POSTING'] = date('d M', $timestamp);
+            } else {
+                $post['WAKTU_POSTING'] = '-';
+            }
+        }
+        unset($post);
+        
         require __DIR__ . '/../views/profile.php';
     }
 

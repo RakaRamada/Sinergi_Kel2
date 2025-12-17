@@ -92,9 +92,20 @@
         </div>
 
         <div class="mt-auto pb-4">
+            <?php 
+                // Logic Fix Avatar Path di Sidebar Kiri
+                $raw_avatar_sidebar = $_SESSION['avatar_url'] ?? '';
+                if (empty($raw_avatar_sidebar)) {
+                    $sidebar_avatar = '/Sinergi/public/assets/images/user.png';
+                } elseif (strpos($raw_avatar_sidebar, '/') === false) {
+                    $sidebar_avatar = '/Sinergi/public/uploads/avatars/' . $raw_avatar_sidebar;
+                } else {
+                    $sidebar_avatar = $raw_avatar_sidebar;
+                }
+            ?>
             <a href="index.php?page=profile" title="Profil Anda"
                 class="block hover:opacity-80 transition-opacity hover:scale-105 transform duration-200">
-                <img src="/Sinergi/public/assets/images/user.png" alt="Avatar Anda"
+                <img src="<?php echo htmlspecialchars($sidebar_avatar); ?>" alt="Avatar Anda"
                     class="w-10 h-10 rounded-full border border-gray-200 bg-white object-cover shadow-sm">
             </a>
         </div>

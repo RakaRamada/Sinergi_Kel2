@@ -13,7 +13,7 @@
                 $grp_img = !empty($grp['group_image']) ? '/Sinergi/public/uploads/group_profiles/' . $grp['group_image'] : '/Sinergi/public/assets/images/user.png';
             ?>
             <a href="index.php?page=messages&group_id=<?= $grp_id ?>&tab=forum"
-                class="flex items-center p-3 border-b border-gray-100 hover:bg-gray-50 transition <?= $is_active ? 'bg-blue-50/60 border-l-4 border-l-blue-500' : '' ?>">
+                class="flex items-center p-3 border-b border-gray-100 hover:bg-gray-50 transition <?= $is_active ? 'bg-gray-50/60 border-l-4 border-l-gray-500' : '' ?>">
                 <img src="<?= $grp_img ?>" class="w-10 h-10 rounded-full mr-3 object-cover border border-gray-200">
                 <div class="flex-1 overflow-hidden">
                     <p class="font-bold text-sm text-gray-800 truncate"><?= htmlspecialchars($grp['nama_group']) ?></p>
@@ -58,7 +58,7 @@
                         </div>
                         <?php if ($post['user_id'] == $_SESSION['user_id']): ?>
                         <button onclick="deleteMainPost(<?= $post['post_id'] ?>, <?= $post['group_id'] ?>)"
-                            class="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition"
+                            class="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition cursor-pointer"
                             title="Hapus Diskusi">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -90,7 +90,7 @@
                             </svg>
                             <span class="like-count"><?= $post['like_count'] ?></span> Suka
                         </button>
-                        <span class="flex items-center gap-1.5 text-blue-600">
+                        <span class="flex items-center gap-1.5 text-gray-600">
                             <svg class="w-5 h-5 fill-none stroke-current" viewBox="0 0 24 24" stroke-width="1.5">
                                 <path stroke-linecap="round" stroke-linejoin="round"
                                     d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z">
@@ -155,7 +155,7 @@
 
                                     <button
                                         onclick="replyToComment(<?= $p['comment_id'] ?>, '<?= htmlspecialchars($p['nama_lengkap'], ENT_QUOTES) ?>', '')"
-                                        class="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-blue-600 transition">
+                                        class="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-600 transition cursor-pointer">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
@@ -165,7 +165,7 @@
 
                                     <?php if($has_reply): ?>
                                     <button onclick="toggleReplies('replies-<?= $p['comment_id'] ?>')"
-                                        class="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition ml-2">
+                                        class="flex items-center gap-1.5 text-xs font-bold text-gray-900 hover:text-gray-600 transition ml-2 cursor-pointer">
                                         <div class="h-[1px] w-6 bg-gray-300"></div>
                                         <span>Lihat <?= $reply_count ?> balasan</span>
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -180,7 +180,7 @@
                             <?php if ($p['user_id'] == $_SESSION['user_id']): ?>
                             <div class="shrink-0 ml-2">
                                 <button onclick="deleteComment(<?= $p['comment_id'] ?>)"
-                                    class="p-2 text-gray-300 hover:text-red-500 hover:bg-gray-50 rounded-full transition border border-transparent hover:border-gray-200"
+                                    class="p-2 text-gray-300 hover:text-red-500 hover:bg-gray-50 rounded-full transition border border-transparent hover:border-gray-200 cursor-pointer"
                                     title="Hapus">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -217,7 +217,7 @@
                                 <?php if ($r['user_id'] == $_SESSION['user_id']): ?>
                                 <div class="shrink-0 ml-2">
                                     <button onclick="deleteComment(<?= $r['comment_id'] ?>)"
-                                        class="p-1.5 text-gray-300 hover:text-red-500 hover:bg-white rounded-full transition"
+                                        class="p-1.5 text-gray-300 hover:text-red-500 hover:bg-white rounded-full transition cursor-pointer"
                                         title="Hapus">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -242,9 +242,9 @@
 
         <div class="w-full bg-white border-t border-gray-200 px-4 p-2 z-40 shrink-0 mb-14 lg:mb-0">
             <div id="reply-preview"
-                class="hidden flex items-center justify-between bg-blue-50 p-2 mb-2 rounded-lg border-l-4 border-blue-500 text-xs shadow-sm mx-auto max-w-3xl">
+                class="hidden flex items-center justify-between bg-gray-50 p-2 mb-2 rounded-lg border-l-4 border-gray-500 text-xs shadow-sm mx-auto max-w-3xl">
                 <div class="overflow-hidden">
-                    <span class="font-bold text-blue-600 block mb-0.5">Membalas <span
+                    <span class="font-bold text-gray-600 block mb-0.5">Membalas <span
                             id="reply-target-name">...</span></span>
                     <span class="text-gray-500 truncate block max-w-xs" id="reply-target-text">...</span>
                 </div>
@@ -256,6 +256,8 @@
                     </svg>
                 </button>
             </div>
+
+
 
             <form onsubmit="submitDetailComment(event, <?= $post['post_id'] ?>)"
                 class="flex gap-3 items-center max-w-3xl mx-auto">
@@ -277,7 +279,7 @@
                 ?>
                 <img src="<?= $my_avatar ?>" class="w-8 h-8 rounded-full object-cover border hidden sm:block">
                 <div
-                    class="flex-1 bg-gray-100 rounded-2xl px-4 py-2 border border-transparent focus-within:border-blue-300 focus-within:bg-white transition-all">
+                    class="flex-1 bg-gray-100 rounded-2xl px-4 py-2 border border-transparent focus-within:border-gray-300 focus-within:bg-white transition-all">
                     <textarea name="isi_komentar" id="main-comment-input" placeholder="Tulis balasan..."
                         class="w-full bg-transparent border-none focus:ring-0 text-sm resize-none overflow-hidden text-gray-800 placeholder-gray-500 text-left"
                         style="min-height: 24px; max-height: 100px;" rows="1"
@@ -354,7 +356,7 @@ function deleteComment(commentId) {
     commentIdToDelete = commentId;
     const modal = document.getElementById('deleteCommentModal');
     const content = document.getElementById('deleteCommentContent');
-    
+
     if (modal && content) {
         modal.classList.remove('hidden');
         void modal.offsetWidth;
@@ -369,21 +371,24 @@ function closeDeleteCommentModal() {
     commentIdToDelete = null;
     const modal = document.getElementById('deleteCommentModal');
     const content = document.getElementById('deleteCommentContent');
-    
+
     if (modal && content) {
         modal.classList.remove('opacity-100');
         modal.classList.add('opacity-0', 'pointer-events-none');
         content.classList.remove('scale-100');
         content.classList.add('scale-95');
-        setTimeout(() => { modal.classList.add('hidden'); }, 200);
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 200);
     }
 }
 
 function confirmDeleteComment() {
     if (!commentIdToDelete) return;
-    
+
     const btn = document.getElementById('confirmDeleteCommentBtn');
-    btn.innerHTML = '<svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+    btn.innerHTML =
+        '<svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
     btn.disabled = true;
 
     const fd = new FormData();
@@ -459,19 +464,85 @@ function toggleLike(btn, postId) {
     });
 }
 
+// --- VARIABEL GLOBAL BARU ---
+let mainPostIdToDelete = null;
+let mainPostGroupId = null;
+
+// --- FUNGSI PEMBUKA MODAL (Menggantikan fungsi lama) ---
 function deleteMainPost(postId, groupId) {
-    if (!confirm('Hapus diskusi ini selamanya?')) return;
+    // Simpan ID ke variabel global sementara
+    mainPostIdToDelete = postId;
+    mainPostGroupId = groupId;
+
+    // Tampilkan Modal
+    const modal = document.getElementById('deletePostModal');
+    const content = document.getElementById('deletePostContent');
+
+    if (modal && content) {
+        modal.classList.remove('hidden');
+        // Trik kecil untuk animasi fade-in
+        setTimeout(() => {
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.classList.add('opacity-100');
+            content.classList.remove('scale-95');
+            content.classList.add('scale-100');
+        }, 10);
+    }
+}
+
+// --- FUNGSI MENUTUP MODAL ---
+function closeDeletePostModal() {
+    mainPostIdToDelete = null;
+    mainPostGroupId = null;
+
+    const modal = document.getElementById('deletePostModal');
+    const content = document.getElementById('deletePostContent');
+
+    if (modal && content) {
+        modal.classList.remove('opacity-100');
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        content.classList.remove('scale-100');
+        content.classList.add('scale-95');
+
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 200);
+    }
+}
+
+// --- FUNGSI EKSEKUSI HAPUS (API CALL) ---
+function confirmDeleteMainPost() {
+    if (!mainPostIdToDelete) return;
+
+    // Ubah tombol jadi loading spinner
+    const btn = document.getElementById('confirmDeletePostBtn');
+    const originalText = btn.innerHTML; // Simpan text asli jaga-jaga kalau error
+    btn.innerHTML =
+        '<svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+    btn.disabled = true;
+
     const fd = new FormData();
-    fd.append('post_id', postId);
+    fd.append('post_id', mainPostIdToDelete);
+
     fetch('index.php?page=api-delete-forum-post', {
         method: 'POST',
         body: fd
     }).then(r => r.json()).then(d => {
         if (d.status === 'success') {
-            window.location.href = `index.php?page=messages&group_id=${groupId}&tab=forum`;
+            // Redirect jika sukses
+            window.location.href = `index.php?page=messages&group_id=${mainPostGroupId}&tab=forum`;
         } else {
-            alert('Gagal menghapus');
+            alert('Gagal menghapus: ' + (d.message || 'Error'));
+            closeDeletePostModal();
+            btn.innerHTML = originalText;
+            btn.disabled = false;
         }
+    }).catch(err => {
+        console.error(err);
+        alert('Terjadi kesalahan jaringan.');
+        closeDeletePostModal();
+        btn.innerHTML = originalText;
+        btn.disabled = false;
     });
 }
 
@@ -541,7 +612,39 @@ document.addEventListener("DOMContentLoaded", function() {
                 Batal
             </button>
             <button type="button" id="confirmDeleteCommentBtn" onclick="confirmDeleteComment()"
-                class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2.5 bg-red-600 text-base font-medium text-white hover:bg-red-700 transition cursor-pointer shadow-red-200">
+                class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2.5 bg-red-600 text-base font-medium text-white hover:bg-red-700 transition cursor-pointer shadow-red-200 cursor-pointer">
+                Hapus
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="deletePostModal"
+    class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/50 backdrop-blur-sm transition-opacity opacity-0 pointer-events-none"
+    aria-modal="true">
+
+    <div id="deletePostContent"
+        class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform scale-95 transition-transform duration-200">
+        <div class="text-center">
+            <div class="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-red-100 mb-4">
+                <svg class="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            </div>
+            <h3 class="text-lg leading-6 font-bold text-gray-900">Hapus Diskusi?</h3>
+            <p class="text-sm text-gray-500 mt-2">
+                Diskusi utama beserta seluruh balasannya akan dihapus permanen. Tindakan ini tidak dapat
+                dibatalkan.
+            </p>
+        </div>
+        <div class="mt-6 flex gap-3">
+            <button type="button" onclick="closeDeletePostModal()"
+                class="w-full inline-flex justify-center rounded-xl border border-gray-300 shadow-sm px-4 py-2.5 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+                Batal
+            </button>
+            <button type="button" id="confirmDeletePostBtn" onclick="confirmDeleteMainPost()"
+                class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2.5 bg-red-600 text-base font-medium text-white hover:bg-red-700 transition cursor-pointer shadow-red-200 cursor-pointer">
                 Hapus
             </button>
         </div>

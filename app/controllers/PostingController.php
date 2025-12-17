@@ -238,7 +238,11 @@ class PostingController {
         $post_id = $_POST['post_id'] ?? 0;
         $result = $this->postModel->toggleLike($_SESSION['user_id'], $post_id);
         if ($result) {
-            $this->sendJson(['status' => 'success', 'action' => $result['action'], 'new_count' => $result['new_count']]);
+            $this->sendJson([
+                'status' => ($result['action'] === 'error') ? 'error' : 'success', 
+                'action' => $result['action'], 
+                'new_count' => $result['new_count']
+            ]);
         } else {
             $this->sendJson(['status' => 'error', 'message' => 'Failed to like']);
         }

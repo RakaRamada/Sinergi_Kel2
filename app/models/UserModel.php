@@ -136,14 +136,13 @@ class UserModel {
      * Kecuali user yang sedang login
      */
     public function getTopActiveUsers($limit = 5, $excludeUserId = 0) {
-        // Logika: Activity Score = Jumlah Postingan + Jumlah Komentar
-        $sql = "SELECT u.user_id, u.username, u.nama_lengkap, u.avatar_url,
-                       (
-                           NVL((SELECT COUNT(*) FROM postingan p WHERE p.user_id = u.user_id), 0) + 
-                           NVL((SELECT COUNT(*) FROM comments c WHERE c.user_id = u.user_id), 0)
-                       ) as activity_score
-                FROM users u
-                WHERE u.user_id != :p_exclude_id
+        // [BARU] Pakai Function f_get_user_score
+        // Gak perlu subquery (SELECT COUNT...) yang bikin pusing
+        $sql = "SELECT 
+                    user_id, username, nama_lengkap, avatar_url,
+                    f_get_user_score(user_id) as activity_score
+                FROM users 
+                WHERE user_id != :p_exclude_id
                 ORDER BY activity_score DESC
                 FETCH FIRST :p_limit ROWS ONLY";
 
@@ -161,7 +160,6 @@ class UserModel {
         while ($row = oci_fetch_assoc($stmt)) {
             $users[] = array_change_key_case($row, CASE_LOWER);
         }
-        oci_free_statement($stmt);
         return $users;
     }
 

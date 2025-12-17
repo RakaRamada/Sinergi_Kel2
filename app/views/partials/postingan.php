@@ -191,6 +191,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 posts.forEach(post => {
+                    
                     // --- A. MULTI IMAGE CAROUSEL LOGIC ---
                     let imagesHTML = '';
                     if (post.POST_IMAGE) {
@@ -408,11 +409,13 @@ function updateCarouselUI(id, prevBtnId, nextBtnId) {
 }
 
 function handleLike(btn, postId) {
+    btn.disabled = true; // Prevent double click
     const countSpan = btn.querySelector('.like-count');
     const svgIcon = btn.querySelector('svg');
     let currentCount = parseInt(countSpan.innerText) || 0;
     const isLiked = btn.classList.contains('text-red-500');
 
+    // Optimistic UI Update
     if (isLiked) {
         btn.classList.remove('text-red-500');
         btn.classList.add('text-gray-500');
@@ -434,6 +437,44 @@ function handleLike(btn, postId) {
     fetch('index.php?page=post-api&method=toggleLike', {
         method: 'POST',
         body: fd
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status !== 'success') {
+            // Revert UI jika gagal
+            if (isLiked) {
+                btn.classList.add('text-red-500');
+                btn.classList.remove('text-gray-500');
+                svgIcon.classList.add('fill-current');
+                svgIcon.classList.remove('fill-none', 'stroke-current');
+            } else {
+                btn.classList.remove('text-red-500');
+                btn.classList.add('text-gray-500');
+                svgIcon.classList.remove('fill-current');
+                svgIcon.classList.add('fill-none', 'stroke-current');
+            }
+            countSpan.innerText = currentCount > 0 ? currentCount : '';
+        } else {
+            // Sinkronkan counter dengan response server (dari trigger database)
+            if (data.new_count !== undefined) {
+                countSpan.innerText = data.new_count > 0 ? data.new_count : '';
+            }
+        }
+    })
+    .catch(err => {
+        console.error('Like error:', err);
+        // Revert on network error
+        if (isLiked) {
+            btn.classList.add('text-red-500');
+            svgIcon.classList.add('fill-current');
+        } else {
+            btn.classList.remove('text-red-500');
+            svgIcon.classList.remove('fill-current');
+        }
+        countSpan.innerText = currentCount > 0 ? currentCount : '';
+    })
+    .finally(() => {
+        btn.disabled = false;
     });
 }
 

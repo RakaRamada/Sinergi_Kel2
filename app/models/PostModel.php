@@ -23,30 +23,47 @@ class PostModel {
      * Mengambil semua postingan untuk Dashboard
      */
     public function getAllPosts($current_user_id) {
-        $sql = "SELECT 
-                    p.post_id, p.user_id, p.konten, p.post_image,
-                    NVL(p.like_count, 0) as LIKE_COUNT,       
-                    NVL(p.comment_count, 0) as COMMENT_COUNT, 
-                    TO_CHAR(p.created_at, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_AT_STR,
-                    u.username, u.nama_lengkap, u.avatar_url,
-                    r.role_name,  
-                    (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.post_id AND l.user_id = :p_curr_uid) AS USER_SUDAH_LIKE
-                FROM postingan p
-                JOIN users u ON p.user_id = u.user_id
-                JOIN roles r ON u.role_id = r.role_id 
-                ORDER BY p.created_at DESC";
-
+        // Panggil View
+        $sql = "SELECT * FROM v_post_dashboard ORDER BY created_at DESC";
         $stmt = oci_parse($this->conn, $sql);
-        $clean_uid = (int)$current_user_id;
-        oci_bind_by_name($stmt, ':p_curr_uid', $clean_uid);
-
+        
         if (!oci_execute($stmt)) return [];
         
         $posts = [];
         while ($row = oci_fetch_assoc($stmt)) {
+            // [PENTING] Cek manual apakah user ini sudah like?
+            // Kalau ini tidak ada, tombol like akan selalu abu-abu (seolah belum like)
+            $userLikeStatus = $this->checkUserLike($row['POST_ID'], $current_user_id);
+            $row['USER_SUDAH_LIKE'] = $userLikeStatus;
+            
             $posts[] = $this->processRowData($row);
         }
+        oci_free_statement($stmt);
         return $posts;
+    }
+
+    // Fungsi Helper di bawah class PostModel
+    private function checkUserLike($post_id, $user_id) {
+        // Cast ke integer untuk keamanan (menghindari SQL injection)
+        $pid = (int)$post_id;
+        $uid = (int)$user_id;
+        
+        // Gunakan nilai langsung tanpa binding (OCI binding bermasalah)
+        $sql = "SELECT COUNT(*) AS CNT FROM likes WHERE post_id = $pid AND user_id = $uid";
+        $stmt = oci_parse($this->conn, $sql);
+        
+        if (!oci_execute($stmt)) {
+            $e = oci_error($stmt);
+            error_log("checkUserLike ERROR: " . print_r($e, true));
+            oci_free_statement($stmt);
+            return 0;
+        }
+        
+        $row = oci_fetch_assoc($stmt);
+        $result = ($row && isset($row['CNT']) && $row['CNT'] > 0) ? 1 : 0;
+        
+        oci_free_statement($stmt);
+        return $result;
     }
 
     /**
@@ -147,6 +164,11 @@ class PostModel {
      * Toggle Like (Like / Unlike) + Kirim Notifikasi
      */
     public function toggleLike($user_id, $post_id) {
+        // Casting ke integer
+        $user_id = (int)$user_id;
+        $post_id = (int)$post_id;
+        
+        // 1. Cek dulu apakah user ini sudah like sebelumnya?
         $checkSql = "SELECT COUNT(*) as hitung FROM likes WHERE post_id = :p_pid AND user_id = :p_uid";
         $stmtCheck = oci_parse($this->conn, $checkSql);
         oci_bind_by_name($stmtCheck, ':p_pid', $post_id);
@@ -156,54 +178,65 @@ class PostModel {
         $alreadyLiked = ($row['HITUNG'] > 0);
         oci_free_statement($stmtCheck);
         
+        // 2. Tentukan Aksi (Insert atau Delete)
+        // Note: Kita TIDAK melakukan UPDATE counter di sini, karena Trigger 'trg_add_like' & 'trg_del_like' yang akan mengerjakannya.
+        
         if ($alreadyLiked) {
+            // Kalau sudah like -> Hapus (Unlike)
             $sql = "DELETE FROM likes WHERE post_id = :p_pid AND user_id = :p_uid";
-            $sqlUpdate = "UPDATE postingan SET like_count = GREATEST(like_count - 1, 0) WHERE post_id = :p_pid";
             $status = 'unliked';
         } else {
+            // Kalau belum like -> Insert (Like)
             $sql = "INSERT INTO likes (post_id, user_id, created_at) VALUES (:p_pid, :p_uid, SYSTIMESTAMP)";
-            $sqlUpdate = "UPDATE postingan SET like_count = like_count + 1 WHERE post_id = :p_pid";
             $status = 'liked';
         }
 
         $stmt = oci_parse($this->conn, $sql);
         oci_bind_by_name($stmt, ':p_pid', $post_id);
         oci_bind_by_name($stmt, ':p_uid', $user_id);
-        if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) return false;
+        
+        // Eksekusi Query dan Langsung Commit
+        $execResult = oci_execute($stmt, OCI_COMMIT_ON_SUCCESS);
+        
+        if (!$execResult) {
+            $e = oci_error($stmt);
+            error_log("toggleLike ERROR: " . print_r($e, true));
+            oci_free_statement($stmt);
+            return ['action' => 'error', 'message' => $e['message'] ?? 'Unknown error', 'new_count' => 0];
+        }
+        
+        oci_free_statement($stmt);
 
-        $stmtUp = oci_parse($this->conn, $sqlUpdate);
-        oci_bind_by_name($stmtUp, ':p_pid', $post_id);
-        oci_execute($stmtUp, OCI_NO_AUTO_COMMIT);
-
-        // NOTIFIKASI LIKE DASHBOARD
+        // 3. Kirim Notifikasi (Hanya jika statusnya 'liked')
         if ($status === 'liked') {
-            $sqlOwner = "SELECT user_id FROM postingan WHERE post_id = :p_pid";
+            // Ambil pemilik postingan
+            $sqlOwner = "SELECT user_id FROM postingan WHERE post_id = $post_id";
             $stmtOwner = oci_parse($this->conn, $sqlOwner);
-            oci_bind_by_name($stmtOwner, ':p_pid', $post_id);
             oci_execute($stmtOwner);
             $rowOwner = oci_fetch_assoc($stmtOwner);
             
+            // Jika pemilik postingan bukan diri sendiri, kirim notif
             if ($rowOwner && $rowOwner['USER_ID'] != $user_id) {
                 $this->notifModel->createNotification(
                     $rowOwner['USER_ID'], 
                     $user_id, 
                     'like', 
                     'menyukai postingan Anda.', 
-                    ['post_id' => $post_id] // Array Baru
+                    ['post_id' => $post_id] 
                 );
             }
             oci_free_statement($stmtOwner);
         }
 
-        oci_commit($this->conn);
-
-        // Get New Count
-        $sqlCount = "SELECT like_count FROM postingan WHERE post_id = :p_pid";
+        // 4. Ambil Jumlah Like Terbaru dari Database
+        // Karena Trigger sudah bekerja di belakang layar, kita tinggal ambil angkanya yang sudah terupdate otomatis.
+        $sqlCount = "SELECT like_count FROM postingan WHERE post_id = $post_id";
         $stmtCount = oci_parse($this->conn, $sqlCount);
-        oci_bind_by_name($stmtCount, ':p_pid', $post_id);
         oci_execute($stmtCount);
         $rowCount = oci_fetch_assoc($stmtCount);
+        oci_free_statement($stmtCount);
         
+        // Kembalikan status dan jumlah baru ke Controller/AJAX
         return ['action' => $status, 'new_count' => $rowCount['LIKE_COUNT']];
     }
 
@@ -226,10 +259,10 @@ class PostModel {
 
         if (!oci_execute($stmt, OCI_NO_AUTO_COMMIT)) return false;
 
-        $sqlUp = "UPDATE postingan SET comment_count = comment_count + 1 WHERE post_id = :p_pid";
-        $stmtUp = oci_parse($this->conn, $sqlUp);
-        oci_bind_by_name($stmtUp, ':p_pid', $post_id);
-        oci_execute($stmtUp, OCI_NO_AUTO_COMMIT);
+        // $sqlUp = "UPDATE postingan SET comment_count = comment_count + 1 WHERE post_id = :p_pid";
+        // $stmtUp = oci_parse($this->conn, $sqlUp);
+        // oci_bind_by_name($stmtUp, ':p_pid', $post_id);
+        // oci_execute($stmtUp, OCI_NO_AUTO_COMMIT);
 
         // NOTIFIKASI KOMEN DASHBOARD
         $sqlOwner = "SELECT user_id FROM postingan WHERE post_id = :p_pid";
@@ -395,11 +428,11 @@ class PostModel {
         // Total yang berkurang = 1 (Induk) + Jumlah Anak
         $total_deleted = 1 + $deleted_children;
         
-        $sqlUp = "UPDATE postingan SET comment_count = comment_count - :p_total WHERE post_id = :p_pid";
-        $stmtUp = oci_parse($this->conn, $sqlUp);
-        oci_bind_by_name($stmtUp, ':p_total', $total_deleted);
-        oci_bind_by_name($stmtUp, ':p_pid', $post_id);
-        oci_execute($stmtUp, OCI_NO_AUTO_COMMIT);
+        // $sqlUp = "UPDATE postingan SET comment_count = comment_count - :p_total WHERE post_id = :p_pid";
+        // $stmtUp = oci_parse($this->conn, $sqlUp);
+        // oci_bind_by_name($stmtUp, ':p_total', $total_deleted);
+        // oci_bind_by_name($stmtUp, ':p_pid', $post_id);
+        // oci_execute($stmtUp, OCI_NO_AUTO_COMMIT);
 
         // 5. Commit Semuanya
         oci_commit($this->conn);

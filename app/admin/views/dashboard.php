@@ -29,7 +29,6 @@ include __DIR__ . '/partials/bottom_nav.php';
                         class="flex-1 sm:flex-none px-4 py-2.5 bg-black text-white text-sm rounded-full cursor-pointer hover:bg-gray-800 transition-colors shadow-md outline-none">
                         <option value="">Semua Status</option>
                         <option value="pending">Pending</option>
-                        <option value="reviewed">Sedang Ditinjau</option>
                         <option value="resolved">Selesai</option>
                     </select>
                     <!-- Tombol Hapus Semua - Hidden on Mobile -->
@@ -49,9 +48,11 @@ include __DIR__ . '/partials/bottom_nav.php';
 
         <!-- Stats Cards - Responsive Grid -->
         <div class="grid grid-cols-3 gap-3 sm:gap-6 mb-8">
-            <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div
+                class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div>
-                    <div class="text-[10px] sm:text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Total</div>
+                    <div class="text-[10px] sm:text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Total
+                    </div>
                     <div class="text-xl sm:text-3xl font-bold text-gray-800" id="stat-total">0</div>
                 </div>
                 <div class="p-2 sm:p-3 bg-gray-50 rounded-full hidden sm:flex">
@@ -61,9 +62,11 @@ include __DIR__ . '/partials/bottom_nav.php';
                     </svg>
                 </div>
             </div>
-            <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div
+                class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div>
-                    <div class="text-[10px] sm:text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Pending</div>
+                    <div class="text-[10px] sm:text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">
+                        Pending</div>
                     <div class="text-xl sm:text-3xl font-bold text-red-500" id="stat-pending">0</div>
                 </div>
                 <div class="p-2 sm:p-3 bg-red-50 rounded-full hidden sm:flex">
@@ -72,9 +75,11 @@ include __DIR__ . '/partials/bottom_nav.php';
                         !</div>
                 </div>
             </div>
-            <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div
+                class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div>
-                    <div class="text-[10px] sm:text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Selesai</div>
+                    <div class="text-[10px] sm:text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">
+                        Selesai</div>
                     <div class="text-xl sm:text-3xl font-bold text-green-500" id="stat-resolved">0</div>
                 </div>
                 <div class="p-2 sm:p-3 bg-green-50 rounded-full hidden sm:flex">
@@ -374,7 +379,7 @@ function renderPagination(pg) {
 
 async function deletePost(reportId) {
     if (await showModernConfirm('Hapus Postingan?',
-        'Postingan akan dihapus permanen beserta komentar dan likes.')) {
+            'Postingan akan dihapus permanen beserta komentar dan likes.')) {
         sendAction('delete_post', {
             report_id: reportId
         });

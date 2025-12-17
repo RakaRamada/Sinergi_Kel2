@@ -127,98 +127,51 @@ class ReportModel {
     }
 
     public function deleteReportedPost($reportId, $adminId) {
-    // Step 0: Ambil POST_ID dari laporan
-    $sqlGet = "SELECT POST_ID FROM REPORTS WHERE REPORT_ID = :p_rid";
-    $stmtGet = oci_parse($this->conn, $sqlGet);
-    oci_bind_by_name($stmtGet, ':p_rid', $reportId);
-    oci_execute($stmtGet);
-    $row = oci_fetch_assoc($stmtGet);
-    $postId = $row['POST_ID'] ?? null;
+    // Panggil Stored Procedure
+    // Perhatikan ada parameter tambahan :p_img buat nangkep nama file
+    $sql = "BEGIN sp_resolve_report_delete_post(:p_rid, :p_aid, :p_status, :p_msg, :p_img); END;";
     
-    if (!$postId) {
-         $this->updateReportStatus($reportId, $adminId, 'resolved', 'Postingan sudah tidak ada');
-         return ['status' => true, 'message' => 'Postingan tidak ditemukan, status laporan diperbarui.'];
-    }
-
-    // Ambil info postingan: gambar DAN pemilik untuk notifikasi
-    $sqlInfo = "SELECT p.POST_IMAGE, p.USER_ID, r.REASON 
-                FROM POSTINGAN p 
-                JOIN REPORTS r ON r.POST_ID = p.POST_ID 
-                WHERE p.POST_ID = :p_pid AND r.REPORT_ID = :p_rid";
-    $stmtInfo = oci_parse($this->conn, $sqlInfo);
-    oci_bind_by_name($stmtInfo, ':p_pid', $postId);
-    oci_bind_by_name($stmtInfo, ':p_rid', $reportId);
-    oci_execute($stmtInfo);
-    $rowInfo = oci_fetch_assoc($stmtInfo);
-    $imagePath = $rowInfo['POST_IMAGE'] ?? null;
-    $postOwnerId = $rowInfo['USER_ID'] ?? null;
-    $reportReason = $rowInfo['REASON'] ?? 'Pelanggaran Konten';
-
-    // [NEW] Kirim notifikasi ke pemilik postingan
-    if ($postOwnerId) {
-        $notifMessage = "Postingan Anda telah dihapus oleh Admin karena pelanggaran: " . $reportReason;
-        $sqlNotifInsert = "INSERT INTO NOTIFICATIONS (USER_ID, RELATED_USER_ID, TYPE, MESSAGE, IS_READ, CREATED_AT) 
-                           VALUES (:p_uid, :p_aid, 'warning', :p_msg, 0, SYSDATE)";
-        $stmtNotifIns = oci_parse($this->conn, $sqlNotifInsert);
-        oci_bind_by_name($stmtNotifIns, ':p_uid', $postOwnerId);
-        oci_bind_by_name($stmtNotifIns, ':p_aid', $adminId);
-        oci_bind_by_name($stmtNotifIns, ':p_msg', $notifMessage);
-        oci_execute($stmtNotifIns, OCI_NO_AUTO_COMMIT);
-    }
-
-    // ============================================================
-    // [FIX] Step 1: Update Laporan jadi Resolved SEBELUM hapus post
-    // ============================================================
-    $sqlUpdate = "UPDATE REPORTS SET STATUS = 'resolved', REVIEWED_BY = :p_aid, ADMIN_NOTES = 'Post dihapus oleh Admin' WHERE REPORT_ID = :p_rid";
-    $stmtUp = oci_parse($this->conn, $sqlUpdate);
-    oci_bind_by_name($stmtUp, ':p_aid', $adminId);
-    oci_bind_by_name($stmtUp, ':p_rid', $reportId);
+    $stmt = oci_parse($this->conn, $sql);
     
-    if(!oci_execute($stmtUp, OCI_NO_AUTO_COMMIT)) {
-        oci_rollback($this->conn);
-        return ['status' => false, 'message' => 'Gagal update status laporan'];
-    }
-
-    // Step 2: Hapus Notifikasi terkait post
-    $sqlNotif = "DELETE FROM NOTIFICATIONS WHERE RELATED_POST_ID = :p_pid";
-    $stmtNotif = oci_parse($this->conn, $sqlNotif);
-    oci_bind_by_name($stmtNotif, ':p_pid', $postId);
-    oci_execute($stmtNotif, OCI_NO_AUTO_COMMIT);
-
-    // Step 3: Hapus Komentar di post
-    $sqlComments = "DELETE FROM COMMENTS WHERE POST_ID = :p_pid";
-    $stmtComments = oci_parse($this->conn, $sqlComments);
-    oci_bind_by_name($stmtComments, ':p_pid', $postId);
-    oci_execute($stmtComments, OCI_NO_AUTO_COMMIT);
-
-    // Step 4: Hapus Likes di post
-    $sqlLikes = "DELETE FROM LIKES WHERE POST_ID = :p_pid";
-    $stmtLikes = oci_parse($this->conn, $sqlLikes);
-    oci_bind_by_name($stmtLikes, ':p_pid', $postId);
-    oci_execute($stmtLikes, OCI_NO_AUTO_COMMIT);
-
-    // Step 5: Hapus Post dari database
-    $sqlDel = "DELETE FROM POSTINGAN WHERE POST_ID = :p_pid";
-    $stmtDel = oci_parse($this->conn, $sqlDel);
-    oci_bind_by_name($stmtDel, ':p_pid', $postId);
+    // Bind Input
+    oci_bind_by_name($stmt, ':p_rid', $reportId);
+    oci_bind_by_name($stmt, ':p_aid', $adminId);
     
-    if (!oci_execute($stmtDel, OCI_NO_AUTO_COMMIT)) {
-        $err = oci_error($stmtDel);
-        oci_rollback($this->conn);
-        return ['status' => false, 'message' => 'Gagal hapus post: ' . ($err['message'] ?? 'Unknown error')];
+    // Bind Output
+    $out_status = '';
+    $out_msg = '';
+    $out_image = ''; // Variabel buat nampung nama file gambar
+    
+    oci_bind_by_name($stmt, ':p_status', $out_status, 32);
+    oci_bind_by_name($stmt, ':p_msg', $out_msg, 500);
+    oci_bind_by_name($stmt, ':p_img', $out_image, 500); // Tampung output gambar
+    
+    // Eksekusi
+    if (!oci_execute($stmt)) {
+        $e = oci_error($stmt);
+        return ['status' => false, 'message' => 'Database Error: ' . $e['message']];
     }
     
-    oci_commit($this->conn);
-
-    // Step 6: Hapus file gambar dari storage (setelah commit)
-    if (!empty($imagePath)) {
-        $fullPath = $_SERVER['DOCUMENT_ROOT'] . '/sinergi/public/assets/uploads/' . basename($imagePath);
-        if (file_exists($fullPath)) {
-            @unlink($fullPath);
+    // Cek Hasil
+    if ($out_status === 'SUCCESS') {
+        
+        // [BAGIAN YANG HILANG TADI]
+        // Hapus file fisik jika database mengembalikan nama gambar
+        if (!empty($out_image)) {
+            // Bersihkan path (karena di DB mungkin tersimpan 'public/assets/...')
+            // Kita ambil nama filenya saja biar aman pakai basename
+            $filename = basename($out_image); 
+            $fullPath = $_SERVER['DOCUMENT_ROOT'] . '/Sinergi/public/assets/uploads/' . $filename;
+            
+            if (file_exists($fullPath)) {
+                @unlink($fullPath); // Hapus dari harddisk
+            }
         }
-    }
 
-    return ['status' => true, 'message' => 'Postingan dihapus & Laporan diselesaikan'];
+        return ['status' => true, 'message' => $out_msg];
+    } else {
+        return ['status' => false, 'message' => $out_msg];
+    }
 }
 
     public function updateReportStatus($reportId, $adminId, $status, $notes) {

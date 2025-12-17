@@ -96,7 +96,8 @@
                 $svgClass = $is_liked ? 'fill-current' : 'fill-none stroke-current';
             ?>
         <div class="bg-white border-b border-gray-200 hover:bg-gray-50/30 transition-colors cursor-pointer"
-            onclick="window.location.href='index.php?page=post-detail&id=<?= $post['POST_ID'] ?>'">
+            data-post-id="<?= htmlspecialchars($post['POST_ID'] ?? 'KOSONG') ?>"
+            onclick="window.location.href='index.php?page=post-detail&id=<?= htmlspecialchars($post['POST_ID'] ?? '') ?>'">
             <div class="p-4">
                 <div class="flex items-start space-x-3">
                     <div class="flex-shrink-0 cursor-pointer"
@@ -218,7 +219,8 @@
                     </div>
                 </div>
             </div>
-            <?php endforeach; ?>
+        </div>
+        <?php endforeach; ?>
             <?php endif; ?>
         </div>
 </main>

@@ -25,7 +25,7 @@ if (isset($messages) && !empty($messages)) {
         ?>
         <div class="flex justify-center my-4 sticky top-2 z-10 pointer-events-none">
             <span
-                class="bg-gray-200 text-gray-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide shadow-sm backdrop-blur-sm bg-opacity-80">
+                class="bg-gray-200 text-gray-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide shadow-sm backdrop-blur-sm min-w-[120px] text-center bg-opacity-80">
                 <?= htmlspecialchars($tanggal_pesan_ini) ?>
             </span>
         </div>
@@ -103,7 +103,7 @@ if (isset($messages) && !empty($messages)) {
             <div class="relative max-w-[85%] sm:max-w-[65%] min-w-[100px]">
 
                 <button onclick="toggleMessageMenu(event, 'menu-<?= $msg_id ?>')"
-                    class="absolute top-0 right-0 m-1 p-1 rounded-full bg-black/10 hover:bg-black/20 text-gray-500 opacity-0 group-hover/msg:opacity-100 transition z-20">
+                    class="absolute top-0 right-0 m-1 p-1 rounded-full bg-black/10 hover:bg-black/20 text-gray-500 opacity-0 group-hover/msg:opacity-100 transition z-20 cursor-pointer">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
@@ -114,7 +114,7 @@ if (isset($messages) && !empty($messages)) {
 
                     <button
                         onclick="handleReply(<?= $msg_id ?>, '<?= $js_sender_name ?>', '<?= substr($js_reply_text, 0, 50) ?>')"
-                        class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-pointer">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
@@ -124,7 +124,7 @@ if (isset($messages) && !empty($messages)) {
 
                     <?php if ($is_my_message): ?>
                     <button onclick="openDeleteModal(<?= $msg_id ?>)"
-                        class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
+                        class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
@@ -239,12 +239,6 @@ if (isset($messages) && !empty($messages)) {
                         <span class="text-[9px] <?= $time_color ?>">
                             <?= htmlspecialchars($created_at_time) ?>
                         </span>
-                        <?php if($is_my_message): ?>
-                        <svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
-                            </path>
-                        </svg>
-                        <?php endif; ?>
                     </div>
                 </div>
             </div>

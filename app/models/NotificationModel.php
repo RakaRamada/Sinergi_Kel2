@@ -12,6 +12,20 @@ class NotificationModel {
      * AMBIL NOTIFIKASI (LENGKAP DENGAN SEMUA ID BARU)
      */
     public function getUserNotifications($user_id) {
+        $sqlClean = "DELETE FROM notifications 
+                     WHERE user_id = :p_uid 
+                     AND is_read = 1 
+                     AND read_at < SYSDATE - 7";
+                     
+        $stmtClean = oci_parse($this->conn, $sqlClean);
+        $uid_clean = (int)$user_id; // Pastikan integer
+        oci_bind_by_name($stmtClean, ':p_uid', $uid_clean);
+        
+        oci_execute($stmtClean, OCI_COMMIT_ON_SUCCESS); 
+        
+        oci_free_statement($stmtClean);
+
+
         $sql = "SELECT 
                     n.notif_id, n.type, n.message, n.is_read, 
                     TO_CHAR(n.created_at, 'YYYY-MM-DD HH24:MI:SS') as time_str,
