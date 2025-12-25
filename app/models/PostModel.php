@@ -23,8 +23,10 @@ class PostModel {
      * Mengambil semua postingan untuk Dashboard
      */
     public function getAllPosts($current_user_id) {
-        // Panggil View
-        $sql = "SELECT * FROM v_post_dashboard ORDER BY created_at DESC";
+        // PERBAIKAN: Tambahkan TO_CHAR untuk memastikan CREATED_AT_STR selalu tersedia
+        $sql = "SELECT v.*, TO_CHAR(v.created_at, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_AT_STR 
+                FROM v_post_dashboard v 
+                ORDER BY v.created_at DESC";
         $stmt = oci_parse($this->conn, $sql);
         
         if (!oci_execute($stmt)) return [];
@@ -448,6 +450,18 @@ class PostModel {
         // Baca CLOB
         if (isset($data['KONTEN']) && is_object($data['KONTEN'])) {
             $data['KONTEN'] = $data['KONTEN']->load();
+        }
+        
+        // PERBAIKAN: Pastikan CREATED_AT_STR tersedia
+        // Jika VIEW tidak menyediakan CREATED_AT_STR, kita buat dari CREATED_AT
+        if (empty($data['CREATED_AT_STR']) && !empty($data['CREATED_AT'])) {
+            if (is_object($data['CREATED_AT']) && method_exists($data['CREATED_AT'], 'format')) {
+                // Jika Oracle DateTime object
+                $data['CREATED_AT_STR'] = $data['CREATED_AT']->format('Y-m-d H:i:s');
+            } elseif (is_string($data['CREATED_AT'])) {
+                // Jika sudah string, langsung pakai
+                $data['CREATED_AT_STR'] = $data['CREATED_AT'];
+            }
         }
         
         // Fix Path Gambar

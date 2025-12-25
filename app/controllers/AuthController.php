@@ -143,8 +143,8 @@ class AuthController
         }
 
         // 3. VALIDASI PASSWORD COMPLEXITY
-        if (strlen($password_input) < 8) {
-            $this->renderRegisterView("Password minimal harus 8 karakter!", $input_data);
+        if (strlen($password_input) < 6) { 
+            $this->renderRegisterView("Password minimal harus 6 karakter!", $input_data);
         }
         if (!preg_match('/[A-Z]/', $password_input)) {
             $this->renderRegisterView("Password harus mengandung minimal satu huruf kapital (A-Z)!", $input_data);
@@ -361,8 +361,8 @@ class AuthController
             exit();
         }
 
-        if (strlen($password) < 8) {
-            $pesan = "Password minimal 8 karakter!";
+        if (strlen($password) < 6) { 
+            $pesan = "Password minimal 6 karakter!";
             require_once 'app/views/reset_password.php';
             exit();
         }

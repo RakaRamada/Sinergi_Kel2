@@ -2,6 +2,7 @@
 /* ====== SEMBUNYIKAN SCROLLBAR ====== */
 .sidebar-kanan-container {
     overflow-y: scroll;
+    position: sticky;
     height: 100vh;
     scrollbar-width: none;
     -ms-overflow-style: none;

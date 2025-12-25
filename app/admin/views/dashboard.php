@@ -138,7 +138,7 @@ include __DIR__ . '/partials/bottom_nav.php';
 // Variabel Global
 let currentPage = 1;
 let totalPages = 1;
-let currentLimit = 10;
+let currentLimit = 5;
 
 // 1. Fungsi Load Data dari API
 function loadReports(page = 1) {

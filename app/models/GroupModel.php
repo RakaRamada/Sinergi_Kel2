@@ -271,11 +271,11 @@ class GroupModel {
      */
     public function searchGroups($searchTerm, $current_user_id = 0) {
         $sql = "SELECT g.group_id, g.nama_group, g.deskripsi, g.group_image, g.is_private,
-                       gm.status AS membership_status
-                FROM groups g
-                LEFT JOIN group_members gm ON (g.group_id = gm.group_id AND gm.user_id = :p_search_uid)
-                WHERE UPPER(g.nama_group) LIKE :p_term
-                ORDER BY g.created_at DESC";
+                   gm.status AS membership_status
+            FROM groups g
+            LEFT JOIN group_members gm ON (g.group_id = gm.group_id AND gm.user_id = :p_search_uid)
+            WHERE UPPER(TO_CHAR(SUBSTR(g.deskripsi, 1, 4000))) LIKE :p_term
+            ORDER BY g.created_at DESC";
                 
         $searchTermWildcard = '%' . strtoupper($searchTerm) . '%';
         $stmt = oci_parse($this->conn, $sql);

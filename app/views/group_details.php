@@ -1,4 +1,5 @@
-<div class="col-span-1 lg:col-span-10 h-[calc(100vh-3px)] bg-[#f0f2f5] overflow-y-auto custom-scrollbar relative pb-20 lg:pb-0">
+<div
+    class="col-span-1 lg:col-span-10 h-[calc(100vh-3px)] bg-[#f0f2f5] overflow-y-auto custom-scrollbar relative pb-20 lg:pb-0">
 
     <div
         class="sticky top-0 z-30 bg-white/90 backdrop-blur-sm border-b border-gray-200 px-4 py-3 flex items-center gap-4 shadow-sm">
@@ -267,7 +268,7 @@
 
             <?php if($view == 'media'): ?>
             <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                <h3 class="font-bold text-gray-800 text-lg mb-6">Foto & Video</h3>
+                <h3 class="font-bold text-gray-800 text-lg mb-6">Foto</h3>
                 <?php if (!empty($group_media)): ?>
                 <div class="grid grid-cols-3 md:grid-cols-4 gap-3">
                     <?php foreach ($group_media as $m): ?>

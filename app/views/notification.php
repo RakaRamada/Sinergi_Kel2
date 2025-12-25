@@ -45,7 +45,7 @@ if (!function_exists('time_elapsed_string_notif')) {
         <h1 class="text-2xl font-bold text-gray-800">Notifikasi</h1>
 
         <button id="btn-clear-all" onclick="openClearModal()"
-            class="hidden text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+            class="hidden text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
@@ -119,16 +119,40 @@ if (!function_exists('time_elapsed_string_notif')) {
         </div>
         <div class="mt-6 flex justify-center gap-3">
             <button onclick="closeClearModal()"
-                class="px-4 py-2 bg-white text-gray-700 font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition">Batal</button>
+                class="px-4 py-2 bg-white text-gray-700 font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition cursor-pointer">Batal</button>
             <button onclick="confirmClearAll()"
-                class="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition shadow-lg">Ya,
+                class="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition shadow-lg cursor-pointer">Ya,
                 Hapus</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Hapus Satu Notifikasi (Modern) -->
+<div id="deleteOneModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onclick="closeDeleteOneModal()"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white rounded-xl shadow-2xl p-6 text-center">
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+            <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        </div>
+        <h3 class="text-lg leading-6 font-bold text-gray-900">Hapus Notifikasi?</h3>
+        <div class="mt-2">
+            <p class="text-sm text-gray-500">Notifikasi ini akan dihapus secara permanen.</p>
+        </div>
+        <div class="mt-6 flex justify-center gap-3">
+            <button onclick="closeDeleteOneModal()"
+                class="px-4 py-2 bg-white text-gray-700 font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition cursor-pointer">Batal</button>
+            <button id="btnConfirmDeleteOne"
+                class="px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition shadow-lg cursor-pointer">Ya, Hapus</button>
         </div>
     </div>
 </div>
 
 <script>
 const hasReadNotif = <?= !empty($read_list) ? 'true' : 'false' ?>;
+let deleteNotifId = null; // Simpan ID yang akan dihapus
 
 function switchTab(tabName) {
     document.getElementById('content-unread').classList.add('hidden');
@@ -154,12 +178,25 @@ function switchTab(tabName) {
     }
 }
 
+// Fungsi buka modal hapus satu notifikasi
 function deleteOne(e, notifId) {
     e.stopPropagation(); // Mencegah klik card
-    if (!confirm('Hapus notifikasi ini?')) return;
+    deleteNotifId = notifId; // Simpan ID
+    document.getElementById('deleteOneModal').classList.remove('hidden');
+}
+
+// Fungsi tutup modal
+function closeDeleteOneModal() {
+    document.getElementById('deleteOneModal').classList.add('hidden');
+    deleteNotifId = null;
+}
+
+// Fungsi konfirmasi hapus
+function confirmDeleteOne() {
+    if (!deleteNotifId) return;
 
     const fd = new FormData();
-    fd.append('notif_id', notifId);
+    fd.append('notif_id', deleteNotifId);
 
     fetch('index.php?page=api-delete-notif', {
             method: 'POST',
@@ -168,20 +205,28 @@ function deleteOne(e, notifId) {
         .then(r => r.json())
         .then(d => {
             if (d.status === 'success') {
-                const el = document.getElementById('notif-card-' + notifId);
+                const el = document.getElementById('notif-card-' + deleteNotifId);
                 if (el) {
                     el.style.opacity = '0';
+                    el.style.transform = 'translateX(20px)';
+                    el.style.transition = 'all 0.3s ease';
                     setTimeout(() => el.remove(), 300);
                 }
+                closeDeleteOneModal();
             } else {
-                alert('Gagal menghapus: ' + (d.message || 'Error server'));
+                closeDeleteOneModal();
+                showAlert('Gagal', 'Gagal menghapus: ' + (d.message || 'Error server'));
             }
         })
         .catch(err => {
             console.error(err);
-            alert('Terjadi kesalahan koneksi.');
+            closeDeleteOneModal();
+            showAlert('Error', 'Terjadi kesalahan koneksi.');
         });
 }
+
+// Event listener untuk tombol konfirmasi
+document.getElementById('btnConfirmDeleteOne').addEventListener('click', confirmDeleteOne);
 
 function openClearModal() {
     document.getElementById('clearModal').classList.remove('hidden');
@@ -197,9 +242,15 @@ function confirmClearAll() {
         })
         .then(r => r.json()).then(d => {
             if (d.status === 'success') location.reload();
-            else alert('Gagal membersihkan: ' + d.message);
+            else showAlert('Gagal', 'Gagal membersihkan: ' + d.message);
         })
-        .catch(err => alert('Koneksi error'));
+        .catch(err => showAlert('Error', 'Koneksi error'));
+}
+
+// Mini alert helper (opsional, sebagai pengganti alert() bawaan)
+function showAlert(title, message) {
+    // Fallback ke alert bawaan browser
+    alert(title + ': ' + message);
 }
 
 document.addEventListener("DOMContentLoaded", function() {
@@ -284,16 +335,16 @@ function renderNotifCard($notif, $is_unread) {
         <?php if ($is_unread && $notif['type'] === 'group_invite'): ?>
         <div class="mt-2 flex gap-2 relative z-10">
             <a href="index.php?page=accept-invite&notif_id=<?= $notif['notif_id'] ?>" onclick="event.stopPropagation()"
-                class="bg-gray-900 text-white text-xs px-3 py-1 rounded hover:bg-gray-700 transition">Terima</a>
+                class="bg-gray-900 text-white text-xs px-3 py-1 rounded hover:bg-gray-700 transition cursor-pointer">Terima</a>
             <a href="index.php?page=reject-invite&notif_id=<?= $notif['notif_id'] ?>" onclick="event.stopPropagation()"
-                class="bg-white border border-gray-300 text-gray-700 text-xs px-3 py-1 rounded hover:bg-red-50 hover:text-red-600 transition">Tolak</a>
+                class="bg-white border border-gray-300 text-gray-700 text-xs px-3 py-1 rounded hover:bg-red-50 hover:text-red-600 transition cursor-pointer">Tolak</a>
         </div>
         <?php endif; ?>
     </div>
 
     <?php if (!$is_unread): ?>
     <button onclick="deleteOne(event, <?= $notif['notif_id'] ?>)"
-        class="absolute top-2 right-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition opacity-0 group-hover:opacity-100"
+        class="absolute top-2 right-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition opacity-0 group-hover:opacity-100 cursor-pointer"
         title="Hapus Notifikasi">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

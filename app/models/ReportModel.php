@@ -9,7 +9,7 @@ class ReportModel {
     }
 
     // --- 1. GET ALL REPORTS (Fitur Pagination + Fix CLOB Achonk) ---
-    public function getAllReports($status = null, $page = 1, $limit = 10) {
+    public function getAllReports($status = null, $page = 1, $limit = 5) {
         $clean_limit = (int)$limit;
         $clean_page  = (int)$page;
         $min = ($clean_page - 1) * $clean_limit + 1;

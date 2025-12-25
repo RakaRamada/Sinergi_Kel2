@@ -16,7 +16,7 @@ class ForumModel {
     }
 
     /**
-     * 1. Ambil Daftar Postingan Forum
+     *  Ambil Daftar Postingan Forum
      */
     public function getForumPostsByGroupId($group_id, $current_user_id) {
         $sql = "SELECT 
@@ -47,6 +47,32 @@ class ForumModel {
         }
         oci_free_statement($stmt);
         return $posts;
+    }
+
+    // ambil komen
+    public function getForumPostComments($post_id) {
+        $sql = "SELECT c.comment_id, c.post_id, c.user_id, c.isi_komentar, c.parent_comment_id,
+                       TO_CHAR(c.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at_str,
+                       u.nama_lengkap, u.username, u.avatar_url,
+                       pu.nama_lengkap as parent_author
+                FROM forum_post_comments c
+                JOIN users u ON c.user_id = u.user_id
+                LEFT JOIN forum_post_comments pc ON c.parent_comment_id = pc.comment_id
+                LEFT JOIN users pu ON pc.user_id = pu.user_id
+                WHERE c.post_id = :p_pid
+                ORDER BY c.created_at ASC";
+                
+        $stmt = oci_parse($this->conn, $sql);
+        $safe_pid = (int)$post_id;
+        oci_bind_by_name($stmt, ':p_pid', $safe_pid);
+        
+        if (!oci_execute($stmt)) return [];
+        
+        $comments = [];
+        while ($row = oci_fetch_assoc($stmt)) {
+            $comments[] = $this->processRowData($row);
+        }
+        return $comments;
     }
 
     /**
@@ -143,33 +169,7 @@ class ForumModel {
         return $status;
     }
 
-    /**
-     * 4. Ambil Komentar
-     */
-    public function getForumPostComments($post_id) {
-        $sql = "SELECT c.comment_id, c.post_id, c.user_id, c.isi_komentar, c.parent_comment_id,
-                       TO_CHAR(c.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at_str,
-                       u.nama_lengkap, u.username, u.avatar_url,
-                       pu.nama_lengkap as parent_author
-                FROM forum_post_comments c
-                JOIN users u ON c.user_id = u.user_id
-                LEFT JOIN forum_post_comments pc ON c.parent_comment_id = pc.comment_id
-                LEFT JOIN users pu ON pc.user_id = pu.user_id
-                WHERE c.post_id = :p_pid
-                ORDER BY c.created_at ASC";
-                
-        $stmt = oci_parse($this->conn, $sql);
-        $safe_pid = (int)$post_id;
-        oci_bind_by_name($stmt, ':p_pid', $safe_pid);
-        
-        if (!oci_execute($stmt)) return [];
-        
-        $comments = [];
-        while ($row = oci_fetch_assoc($stmt)) {
-            $comments[] = $this->processRowData($row);
-        }
-        return $comments;
-    }
+    
 
     /**
      * 5. Buat Komentar Baru (UPDATE: NOTIFIKASI)

@@ -101,7 +101,7 @@ class AdminController {
             if ($status === '') $status = null;
             
             $page = max(1, (int)($_GET['p'] ?? 1));
-            $limit = 10; 
+            $limit = 5; 
 
             $total = $this->reportModel->countAllReports($status);
             $reports = $this->reportModel->getAllReports($status, $page, $limit);

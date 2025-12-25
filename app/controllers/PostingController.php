@@ -154,8 +154,24 @@ class PostingController {
             foreach ($posts as $row) {
                 $row['AVATAR_URL_FIXED'] = $this->fixAvatarPath($row['AVATAR_URL']);
                 
-                $timestamp = strtotime($row['CREATED_AT_STR']); 
-                if ($timestamp) {
+                // PERBAIKAN: Coba multiple possible field names untuk timestamp
+                $rawTimestamp = null;
+                if (!empty($row['CREATED_AT_STR'])) {
+                    $rawTimestamp = $row['CREATED_AT_STR'];
+                } elseif (!empty($row['CREATED_AT'])) {
+                    // Handle jika CREATED_AT adalah object (Oracle Date) atau string
+                    if (is_object($row['CREATED_AT'])) {
+                        $rawTimestamp = $row['CREATED_AT']->format('Y-m-d H:i:s');
+                    } else {
+                        $rawTimestamp = $row['CREATED_AT'];
+                    }
+                } elseif (!empty($row['WAKTU_FIX'])) {
+                    $rawTimestamp = $row['WAKTU_FIX'];
+                }
+                
+                $timestamp = $rawTimestamp ? strtotime($rawTimestamp) : false;
+                
+                if ($timestamp && $timestamp > 0) {
                     $diff = $now - $timestamp;
                     if ($diff < 0) $diff = 0;
 

@@ -161,7 +161,7 @@ $old_data = $old_data ?? [];
                         <label for="password" class="sr-only">Password</label>
                         <input type="password" id="password" name="password" placeholder="Password" required
                             class="w-full border border-gray-300 rounded-lg py-3 px-4 pr-10 focus:outline-none focus:ring-2 focus:ring-gray-500">
-                        <p class="text-xs text-gray-500 mt-1 ml-1">Syarat: Min. 8 karakter, ada Huruf Besar & Angka</p>
+                        <p class="text-xs text-gray-500 mt-1 ml-1">Syarat: Min. 6 karakter, ada Huruf Besar & Angka</p>
                     </div>
 
                     <!-- KONFIRMASI PASSWORD -->

@@ -10,7 +10,7 @@ function acakCaptcha() {
     $pass = array(); 
     // PERBAIKAN: Max index adalah strlen() - 1, bukan - 2
     $panjangAlpha = strlen($alphabet) - 1; 
-    for ($i = 0; $i < 5; $i++) {
+    for ($i = 0; $i < 6; $i++) {
         $n = rand(0, $panjangAlpha);
         $pass[] = $alphabet[$n];
     }
