@@ -26,7 +26,8 @@ if (empty($page)) {
 // 3. WHITELISTS
 $public_pages = [
     'landing', 'login', 'login-process', 'register', 'register-process', 
-    'verify', 'captcha', 'process-login', 'forgot-password', 
+    'verify', 'verify-otp', 'verify-otp-process', 'resend-otp',
+    'captcha', 'process-login', 'forgot-password', 
     'forgot-password-process', 
     'reset-password', 
     'reset-password-process'
@@ -130,6 +131,9 @@ switch ($page) {
     case 'register-process':$authController->doRegister(); break;
     case 'logout':          $authController->logout(); break;
     case 'verify':          $verifController->verifyEmail(); break;
+    case 'verify-otp':      $verifController->showOtpForm(); break;
+    case 'verify-otp-process': $verifController->verifyOtp(); break;
+    case 'resend-otp':      $verifController->resendOtp(); break;
     case 'landing':         $landingController->index(); break;
 
     // --- POSTING & DASHBOARD ---

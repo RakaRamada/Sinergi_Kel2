@@ -187,7 +187,8 @@ class AuthController
 
         // 5. PROSES KE DATABASE
         $password_hash = password_hash($password_input, PASSWORD_DEFAULT);
-        $token = bin2hex(random_bytes(16));
+        // Generate 6-digit OTP
+        $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
         // PERBAIKAN DISINI: Menyiapkan array data untuk UserModel Class
         $dataRegister = [
@@ -196,7 +197,7 @@ class AuthController
             'email'       => $email,
             'pass'        => $password_hash,
             'role'        => $role,
-            'token'       => $token,
+            'token'       => $otp,
             'nomor_induk' => $nomor_induk 
         ];
 
@@ -214,8 +215,8 @@ class AuthController
             $this->renderRegisterView("Gagal registrasi database. Error tidak diketahui.", $input_data);
         }
 
-        // 7. SUKSES
-        $this->sendVerificationEmail($email, $nama_lengkap, $token);
+        // 7. SUKSES - Send OTP email and redirect to OTP page
+        $this->sendOtpEmail($email, $nama_lengkap, $otp);
     }
 
     // --- HELPER FUNCTIONS ---
@@ -226,8 +227,7 @@ class AuthController
         exit(); 
     }
 
-    private function sendVerificationEmail($email, $nama, $token) {
-        $verifLink = "http://localhost/sinergi/index.php?page=verify&code=" . $token;
+    private function sendOtpEmail($email, $nama, $otp) {
         $mail = new PHPMailer(true);
         try {
             $mail->isSMTP();
@@ -241,18 +241,64 @@ class AuthController
             $mail->setFrom('sinergi.tik24@gmail.com', 'PBL SINERGI');
             $mail->addAddress($email, $nama);
             $mail->isHTML(true);
-            $mail->Subject = 'Aktivasi Akun SINERGI Anda';
-            $mail->Body = "Halo $nama,<br><br>Selamat datang di Sinergi. Silakan klik link berikut untuk mengaktifkan akun Anda:<br><br> 
-                           <a href='{$verifLink}' style='background-color:black;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;'>Verifikasi Akun</a>";
+            $mail->Subject = 'Kode OTP Verifikasi Akun SINERGI';
+            $mail->CharSet = 'UTF-8';
+            $mail->Body = $this->getOtpEmailTemplate($nama, $otp);
 
             $mail->send();
-            $_SESSION['error_message'] = "Registrasi berhasil! Cek email untuk verifikasi.";
-            header("Location: index.php?page=login");
+            // Store email in session for OTP verification page
+            $_SESSION['otp_email'] = $email;
+            $_SESSION['otp_nama'] = $nama;
+            header("Location: index.php?page=verify-otp");
         } catch (Exception $e) {
-            $_SESSION['error_message'] = "Registrasi sukses, tapi gagal kirim email verifikasi.";
+            $_SESSION['error_message'] = "Registrasi sukses, tapi gagal kirim email OTP: " . $e->getMessage();
             header("Location: index.php?page=login");
         }
         exit();
+    }
+
+    private function getOtpEmailTemplate($nama, $otp) {
+        $digits = str_split($otp);
+        $otpBoxes = '';
+        foreach ($digits as $digit) {
+            $otpBoxes .= "<span style='display:inline-block;width:48px;height:56px;background:#111827;color:#fff;font-size:28px;font-weight:700;line-height:56px;text-align:center;border-radius:10px;margin:0 4px;font-family:monospace;'>{$digit}</span>";
+        }
+        
+        return "
+        <div style='font-family: Plus Jakarta Sans, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);'>
+            <!-- Header -->
+            <div style='background: linear-gradient(135deg, #111827 0%, #1f2937 100%); padding: 32px; text-align: center;'>
+                <h1 style='color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;'>SINERGI</h1>
+                <p style='color: #9ca3af; margin: 8px 0 0 0; font-size: 14px;'>Verifikasi Akun Anda</p>
+            </div>
+            
+            <!-- Body -->
+            <div style='padding: 40px 32px;'>
+                <p style='color: #374151; font-size: 16px; margin: 0 0 8px 0;'>Halo <strong>{$nama}</strong>,</p>
+                <p style='color: #6b7280; font-size: 15px; margin: 0 0 32px 0; line-height: 1.6;'>Terima kasih telah mendaftar di Sinergi! Gunakan kode OTP berikut untuk memverifikasi akun Anda:</p>
+                
+                <!-- OTP Code -->
+                <div style='text-align: center; margin: 32px 0;'>
+                    {$otpBoxes}
+                </div>
+                
+                <!-- Timer Warning -->
+                <div style='background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin: 24px 0;'>
+                    <p style='color: #92400e; font-size: 14px; margin: 0;'>
+                        <strong>Kode berlaku 5 menit</strong><br>
+                        Jangan bagikan kode ini kepada siapapun.
+                    </p>
+                </div>
+                
+                <p style='color: #6b7280; font-size: 14px; margin: 24px 0 0 0;'>Jika Anda tidak merasa mendaftar di Sinergi, abaikan email ini.</p>
+            </div>
+            
+            <!-- Footer -->
+            <div style='background: #f9fafb; padding: 24px 32px; text-align: center; border-top: 1px solid #e5e7eb;'>
+                <p style='color: #9ca3af; font-size: 12px; margin: 0;'>&copy; 2025 Sinergi Dev Team | Politeknik Negeri Jakarta</p>
+            </div>
+        </div>
+        ";
     }
 
     public function showForgotPassword() {

@@ -215,6 +215,101 @@ class UserModel {
         
         return $result;
     }
+
+    /**
+     * Set OTP code with expiry (5 minutes)
+     */
+    public function setOtp($email, $otp) {
+        $sql = "UPDATE users 
+                SET verifikasi_kode = :otp, 
+                    token_expiry = SYSTIMESTAMP + INTERVAL '5' MINUTE 
+                WHERE UPPER(email) = UPPER(:email)";
+        
+        $stmt = oci_parse($this->conn, $sql);
+        oci_bind_by_name($stmt, ":otp", $otp);
+        oci_bind_by_name($stmt, ":email", $email);
+        
+        $result = oci_execute($stmt, OCI_COMMIT_ON_SUCCESS);
+        oci_free_statement($stmt);
+        
+        return $result;
+    }
+
+    /**
+     * Verify OTP code - check if valid and not expired
+     */
+    public function verifyOtp($email, $otp) {
+        $sql = "SELECT user_id, is_verif, verifikasi_kode, token_expiry 
+                FROM users 
+                WHERE UPPER(email) = UPPER(:email)";
+        
+        $stmt = oci_parse($this->conn, $sql);
+        oci_bind_by_name($stmt, ":email", $email);
+        
+        if (!oci_execute($stmt)) {
+            oci_free_statement($stmt);
+            return 'db_error';
+        }
+        
+        $user = oci_fetch_assoc($stmt);
+        oci_free_statement($stmt);
+        
+        if (!$user) {
+            return 'user_not_found';
+        }
+
+        if ((int)$user['IS_VERIF'] === 1) {
+            return 'already_verified';
+        }
+
+        if ($user['VERIFIKASI_KODE'] !== $otp) {
+            return 'invalid_otp';
+        }
+
+        // Check if OTP expired
+        $sqlExpiry = "SELECT CASE WHEN token_expiry < SYSTIMESTAMP THEN 1 ELSE 0 END as is_expired 
+                      FROM users WHERE UPPER(email) = UPPER(:email)";
+        $stmtExp = oci_parse($this->conn, $sqlExpiry);
+        oci_bind_by_name($stmtExp, ":email", $email);
+        oci_execute($stmtExp);
+        $expRow = oci_fetch_assoc($stmtExp);
+        oci_free_statement($stmtExp);
+
+        if ($expRow && (int)$expRow['IS_EXPIRED'] === 1) {
+            return 'otp_expired';
+        }
+
+        // OTP valid - verify the user
+        $sqlUp = "UPDATE users 
+                  SET is_verif = 1, verifikasi_kode = NULL, token_expiry = NULL 
+                  WHERE UPPER(email) = UPPER(:email)";
+        $stmtUp = oci_parse($this->conn, $sqlUp);
+        oci_bind_by_name($stmtUp, ":email", $email);
+        
+        if (oci_execute($stmtUp, OCI_COMMIT_ON_SUCCESS)) {
+            oci_free_statement($stmtUp);
+            return 'success';
+        }
+        
+        oci_free_statement($stmtUp);
+        return 'db_error';
+    }
+
+    /**
+     * Get user by email for OTP verification (less data)
+     */
+    public function getUserByEmailForOtp($email) {
+        $sql = "SELECT user_id, email, nama_lengkap, is_verif, token_expiry
+                FROM users 
+                WHERE UPPER(email) = UPPER(:email)";
+        $stmt = oci_parse($this->conn, $sql);
+        oci_bind_by_name($stmt, ':email', $email);
+
+        if (!oci_execute($stmt)) return null;
+        $row = oci_fetch_assoc($stmt);
+        oci_free_statement($stmt);
+        return $row ? array_change_key_case($row, CASE_LOWER) : null;
+    }
 }
 
 
